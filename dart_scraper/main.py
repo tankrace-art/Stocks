@@ -1,38 +1,26 @@
-"""DART 전자공시시스템 재무데이터 스크래퍼 - CLI 메인
+"""DART 재무분석 투자도구 - CLI 메인
 
 사용법:
     python -m dart_scraper.main --company "삼성전자" --period "2020-2024"
-    python -m dart_scraper.main --company "SK하이닉스" --period "2023 분기"
-    python -m dart_scraper.main --company "삼성전자" --period "2022-2024" --save excel
+    python -m dart_scraper.main --company "SK하이닉스" --period "2022-2024" --no-business
 """
 
 import argparse
+import os
 import sys
+from datetime import datetime
 
 import pandas as pd
 
 from .config import DART_API_KEY
 from .dart_client import DartClient
 from .report_parser import ReportParser
-from .utils import (
-    format_amount,
-    parse_period,
-    print_table,
-    save_to_excel,
-    save_to_csv,
-)
+from .analyzer import calculate_investment_metrics, build_clean_statement
+from .utils import parse_period, save_investment_excel
 
 
-def print_header(text: str):
-    print(f"\n{'#'*70}")
-    print(f"  {text}")
-    print(f"{'#'*70}")
-
-
-def print_section(text: str):
-    print(f"\n{'─'*60}")
-    print(f"  {text}")
-    print(f"{'─'*60}")
+def _log(msg: str):
+    print(msg)
 
 
 def run_analysis(
@@ -40,44 +28,27 @@ def run_analysis(
     period: str,
     api_key: str = "",
     fs_div: str = "CFS",
-    save_format: str = "",
     include_business: bool = True,
+    output_dir: str = "",
 ):
-    """기업 재무 분석 실행
-
-    Args:
-        company_name: 기업명 (예: "삼성전자")
-        period: 분석기간 (예: "2020-2024", "2023 분기")
-        api_key: DART API 키 (없으면 환경변수 사용)
-        fs_div: CFS(연결) 또는 OFS(개별)
-        save_format: 저장 형식 ("excel", "csv", "" 미저장)
-        include_business: 사업내용 분석 포함 여부
-    """
-    # 초기화
+    """기업 투자분석 실행"""
     client = DartClient(api_key)
     parser = ReportParser(client)
 
-    # 기간 파싱
-    start_year, end_year, report_types = parse_period(period)
+    start_year, end_year, _ = parse_period(period)
 
-    print_header(f"{company_name} 재무 분석")
-    print(f"  분석기간: {start_year}년 ~ {end_year}년")
-    print(f"  보고서: {', '.join(report_types)}")
-    print(f"  재무제표: {'연결' if fs_div == 'CFS' else '개별'}")
+    print(f"\n{'#' * 60}")
+    print(f"  {company_name} 투자분석")
+    print(f"  기간: {start_year}~{end_year}년 | {'연결' if fs_div == 'CFS' else '개별'}재무제표")
+    print(f"{'#' * 60}")
 
-    # ── 1. 기업 검색 ──────────────────────────────────────────
-    print_section("1. 기업 검색")
-    try:
-        matches = client.search_corp(company_name)
-    except Exception as e:
-        print(f"  [오류] 기업 목록 로딩 실패: {e}")
-        return
-
+    # ── 1. 기업 검색 ──
+    print("\n[1/5] 기업 검색 중...")
+    matches = client.search_corp(company_name)
     if not matches:
         print(f"  [오류] '{company_name}' 기업을 찾을 수 없습니다.")
         return
 
-    # 정확 매칭 우선
     target = None
     for m in matches:
         if m["corp_name"] == company_name:
@@ -88,191 +59,109 @@ def run_analysis(
 
     corp_code = target["corp_code"]
     print(f"  기업명: {target['corp_name']}")
-    print(f"  고유번호: {corp_code}")
     print(f"  종목코드: {target['stock_code'] or '(비상장)'}")
 
-    if len(matches) > 1:
-        print(f"\n  * 유사 검색 결과 ({len(matches)}건):")
-        for m in matches[:5]:
-            stock = m['stock_code'] or '비상장'
-            print(f"    - {m['corp_name']} ({stock})")
-
-    # ── 2. 기업 개황 ──────────────────────────────────────────
-    print_section("2. 기업 개황")
-    info = client.get_company_info(corp_code)
-    if info:
-        fields = [
-            ("회사명", "corp_name"),
-            ("영문명", "corp_name_eng"),
-            ("종목코드", "stock_code"),
-            ("대표자", "ceo_nm"),
-            ("법인구분", "corp_cls"),
-            ("업종코드", "induty_code"),
-            ("설립일", "est_dt"),
-            ("결산월", "acc_mt"),
-            ("홈페이지", "hm_url"),
-            ("주소", "adres"),
-        ]
-        for label, key in fields:
-            val = info.get(key, "")
+    # ── 2. 기업 개황 ──
+    print("\n[2/5] 기업 정보 조회 중...")
+    company_info = client.get_company_info(corp_code)
+    if company_info:
+        for label, key in [
+            ("대표자", "ceo_nm"), ("업종", "induty_code"),
+            ("설립일", "est_dt"), ("홈페이지", "hm_url"),
+        ]:
+            val = company_info.get(key, "")
             if val:
                 print(f"  {label}: {val}")
 
-    # ── 3. 재무제표 ──────────────────────────────────────────
-    print_section("3. 재무제표 조회")
-    all_excel_data = {}
-
-    financial_data = client.get_multi_year_financials(
-        corp_code, start_year, end_year, report_types, fs_div
+    # ── 3. 재무제표 크로스 테이블 ──
+    print("\n[3/5] 재무제표 연도별 크로스 비교 테이블 생성 중...")
+    cross_tables = client.get_yearly_cross_data(
+        corp_code, start_year, end_year, fs_div, log_fn=_log
     )
 
-    if not financial_data:
-        print("  [!] 조회된 재무제표가 없습니다.")
+    if cross_tables:
+        for stmt_name, df in cross_tables.items():
+            print(f"  → {stmt_name}: {len(df)}개 계정과목")
     else:
-        for period_key, statements in financial_data.items():
-            print(f"\n  ▶ {period_key}")
-            for stmt_name, df in statements.items():
-                # 주요 계정만 추출하여 표시
-                display_df = _extract_key_accounts(df, stmt_name)
-                if not display_df.empty:
-                    print_table(display_df, f"{period_key} - {stmt_name}")
-                    all_excel_data[f"{period_key}_{stmt_name}"] = df
+        print("  [!] 재무제표 데이터가 없습니다.")
 
-    # ── 4. 사업내용 분석 ─────────────────────────────────────
+    # ── 4. 투자지표 ──
+    print("\n[4/5] 핵심 투자지표 계산 중...")
+    metrics_df = None
+    if cross_tables:
+        metrics_df = calculate_investment_metrics(
+            cross_tables, start_year, end_year
+        )
+        # 터미널에 주요 지표 출력
+        print(f"\n{'─' * 60}")
+        print(f"  핵심 투자지표 요약")
+        print(f"{'─' * 60}")
+        if metrics_df is not None:
+            print(metrics_df.to_string(index=False))
+
+    # ── 5. 사업내용 ──
+    business_data = {}
     if include_business:
-        print_section("4. 사업내용 분석 (사업보고서)")
+        print(f"\n[5/5] 사업보고서 핵심 데이터 추출 중...")
+        business_data = parser.get_yearly_business_data(
+            corp_code, start_year, end_year, log_fn=_log
+        )
+    else:
+        print("\n[5/5] 사업보고서 분석 건너뜀")
 
-        for year in range(start_year, end_year + 1):
-            print(f"\n  ▶ {year}년 사업보고서")
-            sections = parser.parse_business_content(corp_code, year)
+    # ── 엑셀 저장 ──
+    if not cross_tables and not business_data:
+        print("\n[결과] 저장할 데이터가 없습니다.")
+        return
 
-            if not sections:
-                print("    (사업보고서 데이터를 찾을 수 없습니다)")
-                continue
+    if not output_dir:
+        output_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(output_dir, exist_ok=True)
 
-            for section_name, tables in sections.items():
-                print(f"\n    [{section_name}]")
-                for i, df in enumerate(tables):
-                    if not df.empty:
-                        print_table(df, f"{year}년 - {section_name}")
-                        key = f"{year}년_{section_name}"
-                        if i > 0:
-                            key += f"_{i+1}"
-                        all_excel_data[key] = df
+    safe_name = company_name.replace(" ", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe_name}_{start_year}-{end_year}_투자분석_{timestamp}.xlsx"
+    filepath = os.path.join(output_dir, filename)
 
-    # ── 5. 저장 ──────────────────────────────────────────────
-    if save_format and all_excel_data:
-        print_section("5. 데이터 저장")
-        safe_name = company_name.replace(" ", "_")
+    clean_tables = {}
+    for stmt_name, df in cross_tables.items():
+        clean_tables[stmt_name] = build_clean_statement(df, stmt_name)
 
-        if save_format == "excel":
-            filename = f"{safe_name}_{start_year}-{end_year}_재무분석.xlsx"
-            save_to_excel(all_excel_data, filename)
-        elif save_format == "csv":
-            save_to_csv(all_excel_data, f"{safe_name}_{start_year}-{end_year}")
-
-    print(f"\n{'='*70}")
-    print("  분석 완료!")
-    print(f"{'='*70}\n")
-
-
-def _extract_key_accounts(df: pd.DataFrame, stmt_type: str) -> pd.DataFrame:
-    """주요 계정과목만 추출하여 요약 DataFrame 반환"""
-    if df.empty or "account_nm" not in df.columns:
-        return df
-
-    key_accounts = {
-        "재무상태표": [
-            "자산총계", "유동자산", "비유동자산",
-            "부채총계", "유동부채", "비유동부채",
-            "자본총계", "이익잉여금",
-        ],
-        "손익계산서": [
-            "수익(매출액)", "매출액", "매출원가", "매출총이익",
-            "판매비와관리비", "영업이익", "영업이익(손실)",
-            "법인세비용차감전순이익", "당기순이익", "당기순이익(손실)",
-        ],
-        "포괄손익계산서": [
-            "수익(매출액)", "매출액", "매출원가", "매출총이익",
-            "판매비와관리비", "영업이익", "영업이익(손실)",
-            "당기순이익", "당기순이익(손실)", "총포괄손익",
-        ],
-        "현금흐름표": [
-            "영업활동현금흐름", "투자활동현금흐름", "재무활동현금흐름",
-            "현금및현금성자산의순증가", "기초현금및현금성자산",
-            "기말현금및현금성자산",
-        ],
-    }
-
-    accounts = key_accounts.get(stmt_type, [])
-    if not accounts:
-        return df.head(15)
-
-    mask = df["account_nm"].apply(
-        lambda x: any(acc in str(x) for acc in accounts)
+    save_investment_excel(
+        filepath=filepath,
+        company_name=company_name,
+        company_info=company_info,
+        metrics_df=metrics_df,
+        cross_tables=clean_tables,
+        business_data=business_data,
+        start_year=start_year,
+        end_year=end_year,
     )
-    result = df[mask].copy()
 
-    if result.empty:
-        return df.head(10)
-
-    # 금액 포맷팅
-    amount_cols = [c for c in result.columns if "amount" in c]
-    display = result[["account_nm"] + amount_cols].copy()
-    for col in amount_cols:
-        display[col] = display[col].apply(format_amount)
-
-    return display
+    print(f"\n{'=' * 60}")
+    print(f"  분석 완료! → {filepath}")
+    print(f"{'=' * 60}\n")
 
 
 def main():
     argparser = argparse.ArgumentParser(
-        description="DART 전자공시시스템 재무데이터 스크래퍼",
+        description="DART 재무분석 투자도구",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
-  python -m dart_scraper.main --company "삼성전자" --period "2023"
-  python -m dart_scraper.main --company "SK하이닉스" --period "2020-2024"
-  python -m dart_scraper.main --company "LG에너지솔루션" --period "2023 분기"
-  python -m dart_scraper.main --company "삼성전자" --period "2022-2024" --save excel
-  python -m dart_scraper.main --company "현대자동차" --period "2023" --fs 개별
+  python -m dart_scraper.main -c "삼성전자" -p "2020-2024"
+  python -m dart_scraper.main -c "SK하이닉스" -p "2022-2024" --no-business
+  python -m dart_scraper.main -c "현대자동차" -p "2023" --fs 개별
         """,
     )
-    argparser.add_argument(
-        "--company", "-c",
-        required=True,
-        help='기업명 (예: "삼성전자")',
-    )
-    argparser.add_argument(
-        "--period", "-p",
-        required=True,
-        help='분석기간 (예: "2023", "2020-2024", "2023 분기")',
-    )
-    argparser.add_argument(
-        "--api-key", "-k",
-        default="",
-        help="DART API 키 (미지정시 환경변수 DART_API_KEY 사용)",
-    )
-    argparser.add_argument(
-        "--fs",
-        choices=["연결", "개별"],
-        default="연결",
-        help="재무제표 구분 (기본: 연결)",
-    )
-    argparser.add_argument(
-        "--save", "-s",
-        choices=["excel", "csv"],
-        default="",
-        help="결과 저장 형식",
-    )
-    argparser.add_argument(
-        "--no-business",
-        action="store_true",
-        help="사업내용 분석 제외",
-    )
+    argparser.add_argument("--company", "-c", required=True, help='기업명 (예: "삼성전자")')
+    argparser.add_argument("--period", "-p", required=True, help='분석기간 (예: "2020-2024")')
+    argparser.add_argument("--api-key", "-k", default="", help="DART API 키")
+    argparser.add_argument("--fs", choices=["연결", "개별"], default="연결", help="재무제표 구분")
+    argparser.add_argument("--no-business", action="store_true", help="사업내용 분석 제외")
+    argparser.add_argument("--output", "-o", default="", help="출력 디렉토리")
 
     args = argparser.parse_args()
-
     fs_div = "CFS" if args.fs == "연결" else "OFS"
 
     run_analysis(
@@ -280,8 +169,8 @@ def main():
         period=args.period,
         api_key=args.api_key,
         fs_div=fs_div,
-        save_format=args.save,
         include_business=not args.no_business,
+        output_dir=args.output,
     )
 
 

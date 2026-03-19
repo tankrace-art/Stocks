@@ -1,10 +1,10 @@
 """DART OpenAPI 클라이언트
 
 기업 검색, 재무제표 조회, 공시서류 원문 조회 기능을 제공합니다.
+재무제표를 연도별 크로스 비교가 가능한 구조로 정리합니다.
 """
 
 import io
-import json
 import time
 import zipfile
 import xml.etree.ElementTree as ET
@@ -79,12 +79,11 @@ class DartClient:
         for name, info in corp_codes.items():
             if keyword in name:
                 results.append(info)
-        # 상장기업 우선, 이름 짧은 순 정렬
         results.sort(key=lambda x: (not bool(x["stock_code"]), len(x["corp_name"])))
         return results
 
     def get_corp_code(self, company_name: str) -> str:
-        """기업명으로 고유번호 조회 (정확 매칭 우선, 없으면 부분 매칭 첫 번째)"""
+        """기업명으로 고유번호 조회"""
         corp_codes = self.load_corp_codes()
         if company_name in corp_codes:
             return corp_codes[company_name]["corp_code"]
@@ -112,17 +111,7 @@ class DartClient:
         report_type: str = "사업보고서",
         fs_div: str = "CFS",
     ) -> pd.DataFrame:
-        """단일회사 전체 재무제표 조회
-
-        Args:
-            corp_code: 기업 고유번호
-            year: 사업연도
-            report_type: 보고서 유형 (1분기, 반기, 3분기, 사업보고서)
-            fs_div: CFS(연결) 또는 OFS(개별)
-
-        Returns:
-            재무제표 DataFrame
-        """
+        """단일회사 전체 재무제표 조회"""
         reprt_code = REPORT_CODES.get(report_type, "11011")
         params = {
             "corp_code": corp_code,
@@ -133,7 +122,6 @@ class DartClient:
         result = self._request("fnlttSinglAcntAll.json", params)
 
         if result.get("status") != "000":
-            # 연결재무제표가 없으면 개별로 재시도
             if fs_div == "CFS":
                 params["fs_div"] = "OFS"
                 result = self._request("fnlttSinglAcntAll.json", params)
@@ -143,7 +131,7 @@ class DartClient:
         df = pd.DataFrame(result["list"])
         return df
 
-    def get_financial_summary(
+    def get_financial_by_type(
         self,
         corp_code: str,
         year: int,
@@ -161,7 +149,7 @@ class DartClient:
             if subset.empty:
                 continue
             cols_to_keep = [
-                "account_nm", "thstrm_nm", "thstrm_amount",
+                "account_id", "account_nm", "thstrm_nm", "thstrm_amount",
                 "frmtrm_nm", "frmtrm_amount",
                 "bfefrmtrm_nm", "bfefrmtrm_amount", "ord",
             ]
@@ -172,31 +160,115 @@ class DartClient:
             result[sj_name] = subset
         return result
 
-    def get_multi_year_financials(
+    def get_yearly_cross_data(
         self,
         corp_code: str,
         start_year: int,
         end_year: int,
-        report_types: list[str] | None = None,
         fs_div: str = "CFS",
-    ) -> dict[str, dict[str, pd.DataFrame]]:
-        """여러 연도/분기의 재무제표를 일괄 조회
+        log_fn=None,
+    ) -> dict[str, pd.DataFrame]:
+        """연도별 크로스 비교 테이블 생성
+
+        각 재무제표 유형별로, 계정과목을 행(row)에,
+        연도를 열(column)에 배치한 DataFrame을 반환합니다.
 
         Returns:
-            {"{year}년 {report_type}": {재무제표유형: DataFrame}}
+            {"재무상태표": DataFrame, "손익계산서": DataFrame, ...}
+            각 DataFrame의 열: [계정과목, 2020, 2021, 2022, ...]
         """
-        if report_types is None:
-            report_types = ["사업보고서"]
+        # 연도별 데이터 수집
+        yearly_raw: dict[int, dict[str, pd.DataFrame]] = {}
 
-        all_data = {}
         for year in range(start_year, end_year + 1):
-            for rt in report_types:
-                key = f"{year}년 {rt}"
-                summary = self.get_financial_summary(corp_code, year, rt, fs_div)
-                if summary:
-                    all_data[key] = summary
-                time.sleep(0.5)  # API rate limit 대응
-        return all_data
+            if log_fn:
+                log_fn(f"  {year}년 재무제표 조회 중...")
+            statements = self.get_financial_by_type(
+                corp_code, year, "사업보고서", fs_div
+            )
+            if statements:
+                yearly_raw[year] = statements
+                if log_fn:
+                    log_fn(f"  ✓ {year}년 완료")
+            else:
+                if log_fn:
+                    log_fn(f"  - {year}년 데이터 없음")
+            time.sleep(0.5)
+
+        if not yearly_raw:
+            return {}
+
+        # 재무제표 유형별로 연도 크로스 테이블 생성
+        cross_tables = {}
+        stmt_types = set()
+        for year_data in yearly_raw.values():
+            stmt_types.update(year_data.keys())
+
+        for stmt_type in stmt_types:
+            cross_tables[stmt_type] = self._build_cross_table(
+                yearly_raw, stmt_type, start_year, end_year
+            )
+
+        return cross_tables
+
+    def _build_cross_table(
+        self,
+        yearly_raw: dict[int, dict[str, pd.DataFrame]],
+        stmt_type: str,
+        start_year: int,
+        end_year: int,
+    ) -> pd.DataFrame:
+        """특정 재무제표 유형의 연도별 크로스 테이블 생성"""
+        # 모든 연도에서 계정과목 목록과 순서를 수집
+        account_order = {}  # {account_nm: ord}
+        account_ids = {}    # {account_nm: account_id}
+
+        for year in range(start_year, end_year + 1):
+            if year not in yearly_raw or stmt_type not in yearly_raw[year]:
+                continue
+            df = yearly_raw[year][stmt_type]
+            for _, row in df.iterrows():
+                nm = str(row.get("account_nm", "")).strip()
+                if not nm:
+                    continue
+                ord_val = row.get("ord", 999)
+                if nm not in account_order or ord_val < account_order[nm]:
+                    account_order[nm] = ord_val
+                if nm not in account_ids:
+                    aid = str(row.get("account_id", "")).strip()
+                    account_ids[nm] = aid
+
+        if not account_order:
+            return pd.DataFrame()
+
+        # 순서대로 정렬
+        sorted_accounts = sorted(account_order.items(), key=lambda x: x[1])
+        account_names = [a[0] for a in sorted_accounts]
+
+        # 크로스 테이블 구성
+        result = {"계정과목": account_names}
+        years = list(range(start_year, end_year + 1))
+
+        for year in years:
+            col_values = []
+            if year in yearly_raw and stmt_type in yearly_raw[year]:
+                df = yearly_raw[year][stmt_type]
+                # account_nm -> thstrm_amount 매핑
+                amount_map = {}
+                for _, row in df.iterrows():
+                    nm = str(row.get("account_nm", "")).strip()
+                    amt = row.get("thstrm_amount", "")
+                    if nm and amt:
+                        amount_map[nm] = amt
+
+                for acc_nm in account_names:
+                    col_values.append(amount_map.get(acc_nm, ""))
+            else:
+                col_values = [""] * len(account_names)
+
+            result[f"{year}"] = col_values
+
+        return pd.DataFrame(result)
 
     # ── 공시서류 목록 / 원문 조회 ─────────────────────────────
 
@@ -207,11 +279,7 @@ class DartClient:
         end_date: str,
         pblntf_ty: str = "A",
     ) -> list[dict]:
-        """공시 목록 조회
-
-        Args:
-            pblntf_ty: A=정기공시, B=주요사항보고, C=발행공시, D=지분공시, E=기타공시, F=외부감사, G=펀드, H=자산유동화, I=거래소공시, J=공정위공시
-        """
+        """공시 목록 조회"""
         params = {
             "corp_code": corp_code,
             "bgn_de": start_date.replace("-", ""),
@@ -255,7 +323,6 @@ class DartClient:
             report_nm = d.get("report_nm", "")
             if "사업보고서" in report_nm and "첨부" not in report_nm and "정정" not in report_nm:
                 return d["rcept_no"]
-        # 정정 포함해서 재검색
         for d in disclosures:
             if "사업보고서" in d.get("report_nm", ""):
                 return d["rcept_no"]
