@@ -59,10 +59,51 @@ def _make_driver(headless: bool = True):
         return None
 
 
+def _brand_check(item, url: str = "") -> tuple[str, bool, bool]:
+    """
+    Check if item element contains Medicube or Anua.
+    Searches: visible text, data-* attributes, img alt texts, and URL.
+    Returns: (brand_name, is_medicube, is_anua)
+    """
+    parts: list[str] = [item.get_text(" ", strip=True).lower()]
+
+    # data-* attributes (e.g. data-brand, data-brand-name)
+    if hasattr(item, "attrs"):
+        for val in item.attrs.values():
+            if isinstance(val, str):
+                parts.append(val.lower())
+            elif isinstance(val, list):
+                parts.extend(v.lower() for v in val if isinstance(v, str))
+
+    # image alt texts (product images often contain product/brand name)
+    for img in item.find_all("img", alt=True):
+        parts.append(img.get("alt", "").lower())
+
+    # product URL slug
+    parts.append(url.lower())
+
+    combined = " ".join(parts)
+    is_medicube = any(kw in combined for kw in BRAND_KW)
+    is_anua = any(kw in combined for kw in ANUA_KW)
+
+    # Try to get an explicit brand element
+    brand_el = item.find(class_=lambda c: c and "brand" in c.lower())
+    brand = brand_el.get_text(strip=True) if brand_el else ""
+    if not brand:
+        if is_medicube:
+            brand = "Medicube"
+        elif is_anua:
+            brand = "ANUA"
+
+    return brand, is_medicube, is_anua
+
+
 def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[dict]:
     def log(m):
-        if log_callback: log_callback(m)
-        else: print(m)
+        if log_callback:
+            log_callback(m)
+        else:
+            print(m)
 
     products = []
 
@@ -104,14 +145,12 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
         if items:
             log(f"[OliveYoung] 대체 파싱: {len(items)}개 발견")
 
-    seen_names = set()
-    for rank, item in enumerate(items[:100], 1):
+    seen_names: set[str] = set()
+    real_rank = 0
+    for item in items[:200]:
         text = item.get_text(" ", strip=True)
         if not text or len(text) < 5:
             continue
-
-        brand_el = item.find(class_=lambda c: c and "brand" in c.lower())
-        brand = brand_el.get_text(strip=True) if brand_el else ""
 
         name_el = (
             item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "prd_name", "goods_name"]))
@@ -133,11 +172,14 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
             if url and not url.startswith("http"):
                 url = "https://global.oliveyoung.com" + url
 
-        tl = text.lower()
-        is_medicube = any(kw in tl for kw in BRAND_KW)
-        is_anua = any(kw in tl for kw in ANUA_KW)
+        brand, is_medicube, is_anua = _brand_check(item, url)
+
+        real_rank += 1
+        if real_rank <= 3:
+            log(f"[OliveYoung] 샘플 상품 {real_rank}: brand={brand!r} name={name[:50]!r}")
+
         products.append({
-            "rank": rank,
+            "rank": real_rank,
             "brand": brand,
             "name": name,
             "price": price,
@@ -147,6 +189,7 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
         })
 
     return products
+
 
 
 def _scroll_load_all(driver, max_scrolls: int = 15) -> None:
