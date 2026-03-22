@@ -77,87 +77,208 @@ def _parse_number(text: str):
         return None
 
 
+def _dismiss_popups(driver, log):
+    """쿠키 동의, GDPR, 닫기 버튼 등 팝업 처리."""
+    popup_selectors = [
+        # 쿠키 동의
+        "button[id*='accept']", "button[class*='accept']",
+        "button[id*='cookie']", "button[class*='cookie']",
+        "[id*='gdpr'] button", "[class*='gdpr'] button",
+        "button[data-cookiefirst-action='accept']",
+        ".cc-btn.cc-allow", ".cookie-consent button",
+        # 일반 닫기
+        "button[aria-label='Close']", "button[aria-label='close']",
+        ".modal-close", ".close-btn", "[class*='close'] button",
+    ]
+    for sel in popup_selectors:
+        try:
+            els = driver.find_elements(By.CSS_SELECTOR, sel)
+            for el in els:
+                if el.is_displayed():
+                    driver.execute_script("arguments[0].click();", el)
+                    time.sleep(0.5)
+        except Exception:
+            pass
+
+
+def _fill_by_js(driver, selector: str, value: str) -> bool:
+    """JavaScript로 input에 값 입력 (일반 send_keys가 막힐 때 사용)."""
+    try:
+        driver.execute_script(
+            f"""
+            var el = document.querySelector('{selector}');
+            if (el) {{
+                el.value = arguments[0];
+                el.dispatchEvent(new Event('input', {{bubbles:true}}));
+                el.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+            """,
+            value,
+        )
+        return True
+    except Exception:
+        return False
+
+
 def _login_exolyt(driver, email: str, password: str, log) -> bool:
     """Log into Exolyt. Returns True if login appears successful."""
     try:
         log(f"[TikTok] Exolyt 로그인 중... ({email})")
         driver.get(EXOLYT_LOGIN_URL)
-        time.sleep(4)
+        time.sleep(5)
 
-        wait = WebDriverWait(driver, 15)
+        # 팝업(쿠키 동의 등) 먼저 닫기
+        _dismiss_popups(driver, log)
+        time.sleep(1)
 
-        # Find email field
+        wait = WebDriverWait(driver, 20)
+
+        # ── 이메일 입력 ───────────────────────────────────
         email_input = None
-        for sel in ["input[type='email']", "input[name='email']",
-                    "input[placeholder*='email' i]", "#email", "input[name='username']"]:
+        email_selectors = [
+            "input[type='email']",
+            "input[name='email']",
+            "input[autocomplete='email']",
+            "input[placeholder*='email' i]",
+            "input[placeholder*='이메일' i]",
+            "#email", "#username",
+            "input[name='username']",
+            "input[name='login']",
+            "form input:first-of-type",
+        ]
+        for sel in email_selectors:
             try:
-                email_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sel)))
+                el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel)))
+                email_input = el
+                log(f"[TikTok] 이메일 필드 발견: {sel}")
                 break
             except TimeoutException:
                 continue
 
         if email_input is None:
+            # JS fallback: 페이지의 첫 번째 input 사용
+            try:
+                inputs = driver.find_elements(By.TAG_NAME, "input")
+                visible = [i for i in inputs if i.is_displayed() and i.get_attribute("type") != "hidden"]
+                if visible:
+                    email_input = visible[0]
+                    log("[TikTok] 이메일 필드: 첫 번째 visible input 사용")
+            except Exception:
+                pass
+
+        if email_input is None:
             log("[TikTok] 이메일 입력창을 찾을 수 없습니다.")
+            log(f"[TikTok] 현재 URL: {driver.current_url}")
             return False
 
-        email_input.clear()
-        email_input.send_keys(email)
+        try:
+            email_input.clear()
+            email_input.click()
+            time.sleep(0.3)
+            email_input.send_keys(email)
+        except Exception:
+            _fill_by_js(driver, email_selectors[0], email)
         time.sleep(0.5)
 
-        # Find password field
+        # ── 비밀번호 입력 ─────────────────────────────────
         pwd_input = None
-        for sel in ["input[type='password']", "input[name='password']", "#password"]:
+        for sel in ["input[type='password']", "input[name='password']",
+                    "input[autocomplete='current-password']", "#password"]:
             try:
                 pwd_input = driver.find_element(By.CSS_SELECTOR, sel)
-                break
+                if pwd_input.is_displayed():
+                    log(f"[TikTok] 비밀번호 필드 발견: {sel}")
+                    break
             except NoSuchElementException:
                 continue
+
+        if pwd_input is None:
+            try:
+                inputs = driver.find_elements(By.TAG_NAME, "input")
+                for inp in inputs:
+                    if inp.get_attribute("type") == "password" or inp.is_displayed():
+                        # skip the email one
+                        if inp != email_input:
+                            pwd_input = inp
+                            log("[TikTok] 비밀번호 필드: fallback input 사용")
+                            break
+            except Exception:
+                pass
 
         if pwd_input is None:
             log("[TikTok] 비밀번호 입력창을 찾을 수 없습니다.")
             return False
 
-        pwd_input.clear()
-        pwd_input.send_keys(password)
+        try:
+            pwd_input.clear()
+            pwd_input.click()
+            time.sleep(0.3)
+            pwd_input.send_keys(password)
+        except Exception:
+            _fill_by_js(driver, "input[type='password']", password)
         time.sleep(0.5)
 
-        # Submit form
+        # ── 로그인 버튼 클릭 ──────────────────────────────
         submitted = False
-        for sel in ["button[type='submit']", "button.login-btn", "input[type='submit']",
-                    "button.btn-primary", "button.sign-in"]:
+        btn_selectors = [
+            "button[type='submit']",
+            "input[type='submit']",
+            "button[class*='login']", "button[class*='Login']",
+            "button[class*='sign']", "button[class*='Sign']",
+            "button[class*='submit']",
+            "button.btn-primary",
+            "form button",
+        ]
+        for sel in btn_selectors:
             try:
                 btn = driver.find_element(By.CSS_SELECTOR, sel)
-                btn.click()
-                submitted = True
-                break
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    submitted = True
+                    log(f"[TikTok] 로그인 버튼 클릭: {sel}")
+                    break
             except Exception:
                 continue
 
         if not submitted:
+            log("[TikTok] 버튼 없음 → Enter 키 입력")
             pwd_input.send_keys(Keys.RETURN)
 
-        time.sleep(6)
+        time.sleep(8)
 
-        # Check login result
+        # ── 로그인 결과 확인 ──────────────────────────────
         current_url = driver.current_url.lower()
+        log(f"[TikTok] 로그인 후 URL: {current_url}")
+
         if "login" not in current_url:
             log("[TikTok] Exolyt 로그인 성공!")
             return True
 
-        # Check for error message
+        # 에러 메시지 확인
         try:
-            error_els = driver.find_elements(By.CSS_SELECTOR, ".error, .alert-danger, [class*='error']")
-            if error_els:
-                for el in error_els:
-                    msg = el.text.strip()
-                    if msg:
-                        log(f"[TikTok] 로그인 오류: {msg}")
-                return False
+            error_els = driver.find_elements(
+                By.CSS_SELECTOR,
+                ".error, .alert, .alert-danger, [class*='error'], [class*='Error'], [role='alert']"
+            )
+            for el in error_els:
+                msg = el.text.strip()
+                if msg:
+                    log(f"[TikTok] 로그인 오류 메시지: {msg}")
         except Exception:
             pass
 
-        log("[TikTok] 로그인 상태 확인 중 - 계속 진행합니다.")
-        return True
+        # URL에 login이 남아있어도 실제로 로그인됐을 수 있음 (일부 SPA)
+        try:
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            success_hints = ["dashboard", "profile", "logout", "sign out", "my account"]
+            if any(h in page_text.lower() for h in success_hints):
+                log("[TikTok] 로그인 성공 확인 (페이지 내용 기반)")
+                return True
+        except Exception:
+            pass
+
+        log("[TikTok] 로그인 실패 - URL이 여전히 login 페이지")
+        return False
 
     except Exception as e:
         log(f"[TikTok] 로그인 오류: {e}")
