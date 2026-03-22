@@ -205,12 +205,28 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
         if email_input is None:
             log("[TikTok] 이메일 입력창을 찾을 수 없습니다.")
             log(f"[TikTok] 현재 URL: {driver.current_url}")
-            # 페이지 소스 일부 출력 (디버그용)
+            # ── 상세 디버그 ──────────────────────────────
             try:
-                src = driver.page_source[:500]
-                log(f"[TikTok] 페이지 소스(500자): {src}")
+                all_inputs = driver.find_elements(By.TAG_NAME, "input")
+                log(f"[TikTok] 페이지 내 input 총 {len(all_inputs)}개:")
+                for i, inp in enumerate(all_inputs[:8]):
+                    try:
+                        log(f"  [{i}] type={inp.get_attribute('type')} "
+                            f"name={inp.get_attribute('name')} "
+                            f"id={inp.get_attribute('id')} "
+                            f"visible={inp.is_displayed()}")
+                    except Exception:
+                        pass
             except Exception:
                 pass
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text[:800]
+                log(f"[TikTok] 페이지 본문(800자): {body_text}")
+            except Exception:
+                try:
+                    log(f"[TikTok] 페이지 소스(800자): {driver.page_source[:800]}")
+                except Exception:
+                    pass
             return False
 
         log(f"[TikTok] 이메일 필드 발견: {matched_sel}")
