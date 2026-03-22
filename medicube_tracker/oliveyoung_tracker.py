@@ -1,4 +1,4 @@
-"""Olive Young Global Bestseller Tracker"""
+"""Olive Young Global Bestseller Tracker - Selenium (React app) + requests fallback"""
 import time
 import requests
 from datetime import datetime
@@ -7,18 +7,190 @@ from bs4 import BeautifulSoup
 from .config import OLIVEYOUNG_URL, BRAND_KEYWORDS, HEADERS
 
 
-def fetch_oliveyoung_rankings(log_callback=None) -> dict:
-    """
-    Fetch Olive Young Global bestseller rankings and find Medicube & APR brand products.
-    URL: https://global.oliveyoung.com/display/page/best-seller
-    """
-    def log(msg):
-        if log_callback:
-            log_callback(msg)
-        else:
-            print(msg)
+BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 
-    log("[OliveYoung] 올리브영 글로벌 베스트셀러 수집 중...")
+# Olive Young Global URLs to try
+_OY_URLS = [
+    "https://global.oliveyoung.com/display/page/best-seller",
+    "https://global.oliveyoung.com/display/page/best-seller?target=pillsTab1Nav1",
+    "https://global.oliveyoung.com/product/lists?cate_no=01",  # category list
+]
+
+
+# ─── Selenium-based fetch (primary - React app) ───────────────────────────────
+
+def _make_driver(headless: bool = True):
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+
+        options = Options()
+        if headless:
+            options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1366,900")
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        except Exception:
+            driver = webdriver.Chrome(options=options)
+
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        return driver
+    except Exception:
+        return None
+
+
+def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[dict]:
+    """Parse product items from BeautifulSoup object."""
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
+
+    products = []
+
+    # Selector priority list for Olive Young Global
+    selectors = [
+        ".prd_info",
+        ".product-item",
+        ".item_product_list li",
+        "[class*='ProductCard']",
+        "[class*='product-card']",
+        "[class*='prd_wrap']",
+        ".prd_wrap",
+        "li[class*='item']",
+        "[class*='product']",
+        "article",
+    ]
+
+    items = []
+    for sel in selectors:
+        found = soup.select(sel)
+        if found and len(found) > 3:
+            log(f"[OliveYoung] 셀렉터 '{sel}'로 {len(found)}개 발견")
+            items = found
+            break
+
+    if not items:
+        # Fallback: any div/li with product-like class names
+        items = soup.find_all(
+            ["li", "div"],
+            class_=lambda c: c and any(
+                x in " ".join(c).lower() for x in ["product", "prd", "goods", "item"]
+            ),
+        )
+        if items:
+            log(f"[OliveYoung] 대체 파싱: {len(items)}개 발견")
+
+    for rank, item in enumerate(items[:100], 1):
+        text = item.get_text(" ", strip=True)
+        if not text or len(text) < 5:
+            continue
+
+        # Brand
+        brand_el = item.find(class_=lambda c: c and "brand" in c.lower())
+        brand = brand_el.get_text(strip=True) if brand_el else ""
+
+        # Product name
+        name_el = (
+            item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "prd_name"]))
+            or item.find(["h2", "h3", "h4", "p", "span"])
+        )
+        name = name_el.get_text(strip=True) if name_el else text[:80]
+
+        # Price
+        price_el = item.find(class_=lambda c: c and "price" in c.lower())
+        price = price_el.get_text(strip=True) if price_el else ""
+
+        # URL
+        link_el = item.find("a", href=True)
+        url = ""
+        if link_el:
+            url = link_el.get("href", "")
+            if url and not url.startswith("http"):
+                url = "https://global.oliveyoung.com" + url
+
+        is_medicube = any(kw in text.lower() for kw in BRAND_KW)
+        products.append({
+            "rank": rank,
+            "brand": brand,
+            "name": name,
+            "price": price,
+            "url": url,
+            "is_medicube": is_medicube,
+        })
+
+    return products
+
+
+def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
+
+    driver = _make_driver(headless=True)
+    if driver is None:
+        log("[OliveYoung] Selenium 드라이버 시작 실패")
+        return None
+
+    products = []
+    try:
+        for url in _OY_URLS:
+            log(f"[OliveYoung] Selenium 로딩: {url}")
+            driver.get(url)
+
+            # Wait for React to hydrate
+            time.sleep(6)
+
+            # Scroll to trigger lazy-load
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
+            time.sleep(2)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+
+            soup = BeautifulSoup(driver.page_source, "lxml")
+            products = _parse_products_from_soup(soup, log_callback)
+
+            if products:
+                log(f"[OliveYoung] Selenium 성공: {len(products)}개")
+                break
+
+        if not products:
+            # Last resort: full text search in page source
+            log("[OliveYoung] 구조 파싱 실패 → 텍스트 검색 시도...")
+            body_text = driver.find_element("tag name", "body").text.lower()
+            hits = sum(body_text.count(kw) for kw in BRAND_KW)
+            if hits > 0:
+                log(f"[OliveYoung] 페이지에서 'medicube' {hits}회 발견 (구조 파싱 안됨)")
+
+    except Exception as e:
+        log(f"[OliveYoung] Selenium 오류: {e}")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+    return products if products else None
+
+
+def _fetch_via_requests(log_callback=None) -> list[dict] | None:
+    """Try requests+BS4 (works only if Olive Young renders server-side for this path)."""
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
 
     session = requests.Session()
     session.headers.update({
@@ -26,103 +198,67 @@ def fetch_oliveyoung_rankings(log_callback=None) -> dict:
         "Referer": "https://global.oliveyoung.com/",
     })
 
-    medicube_products = []
-    all_products = []
-
-    try:
-        resp = session.get(OLIVEYOUNG_URL, timeout=20)
-        if resp.status_code != 200:
-            log(f"[OliveYoung] HTTP {resp.status_code} 오류")
-            return {"error": f"HTTP {resp.status_code}"}
-
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        # Olive Young Global product selectors
-        product_selectors = [
-            ".prd_info",
-            ".product-item",
-            ".item-wrap",
-            "li.goods",
-            "[class*='product']",
-            "[class*='prd']",
-            "[class*='item']",
-            "article",
-        ]
-
-        items = []
-        for selector in product_selectors:
-            items = soup.select(selector)
-            if items and len(items) > 3:
-                log(f"[OliveYoung] 셀렉터 '{selector}'로 {len(items)}개 항목 발견")
-                break
-
-        if not items:
-            # Fallback: try all links
-            log("[OliveYoung] 대체 파싱 방법 사용 중...")
-            items = soup.find_all(["li", "div"], class_=lambda c: c and (
-                "item" in c.lower() or "product" in c.lower() or "goods" in c.lower()
-            ))
-
-        if not items:
-            # Last resort: text search
-            page_text = resp.text.lower()
-            for kw in BRAND_KEYWORDS:
-                count = page_text.count(kw.lower())
-                log(f"[OliveYoung] 텍스트 검색: '{kw}' {count}회")
-
-        for rank, item in enumerate(items[:100], 1):
-            item_text = item.get_text(strip=True)
-            if not item_text:
+    for url in _OY_URLS:
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code != 200:
                 continue
+            soup = BeautifulSoup(resp.text, "lxml")
+            products = _parse_products_from_soup(soup, log_callback)
+            if products:
+                log(f"[OliveYoung] requests 성공: {len(products)}개")
+                return products
+        except requests.RequestException:
+            continue
 
-            # Extract product name
-            name_el = (
-                item.find(class_=lambda c: c and ("name" in c.lower() or "title" in c.lower() or "prd" in c.lower()))
-                or item.find(["h2", "h3", "h4", "p", "span"])
-            )
-            product_name = name_el.get_text(strip=True) if name_el else item_text[:80]
+    return None
 
-            # Extract brand name
-            brand_el = item.find(class_=lambda c: c and "brand" in c.lower())
-            brand_name = brand_el.get_text(strip=True) if brand_el else ""
 
-            # Extract price
-            price_el = item.find(class_=lambda c: c and "price" in c.lower())
-            price = price_el.get_text(strip=True) if price_el else ""
+# ─── Public API ───────────────────────────────────────────────────────────────
 
-            # Extract URL
-            link_el = item.find("a", href=True)
-            url = link_el.get("href", "") if link_el else ""
-            if url and not url.startswith("http"):
-                url = "https://global.oliveyoung.com" + url
+def fetch_oliveyoung_rankings(log_callback=None) -> dict:
+    """
+    Fetch Olive Young Global bestseller rankings.
+    Uses Selenium (primary) since the site is React-rendered.
+    Falls back to requests if Selenium is unavailable.
+    """
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
 
-            product = {
-                "rank": rank,
-                "brand": brand_name,
-                "name": product_name,
-                "price": price,
-                "url": url,
-            }
-            all_products.append(product)
+    log("[OliveYoung] 올리브영 글로벌 베스트셀러 수집 중 (Selenium)...")
 
-            # Check if Medicube
-            is_medicube = any(kw.lower() in item_text.lower() for kw in BRAND_KEYWORDS)
-            if is_medicube:
-                product["is_medicube"] = True
-                medicube_products.append(product)
-                log(f"[OliveYoung] Medicube 발견! 순위 {rank}: {product_name[:50]}")
+    # Try Selenium first (React app needs JS execution)
+    products = _fetch_via_selenium(log_callback)
 
-        log(f"[OliveYoung] 총 {len(all_products)}개 상품 중 Medicube {len(medicube_products)}개 발견")
+    if not products:
+        log("[OliveYoung] Selenium 실패 → requests 시도...")
+        products = _fetch_via_requests(log_callback)
 
-    except Exception as e:
-        log(f"[OliveYoung] 오류: {e}")
-        return {"error": str(e)}
+    if not products:
+        log("[OliveYoung] 데이터 수집 실패")
+        return {
+            "platform": "Olive Young Global",
+            "total_scanned": 0,
+            "medicube_count": 0,
+            "medicube_products": [],
+            "all_products_top20": [],
+            "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "error": "scraping failed",
+        }
+
+    medicube_products = [p for p in products if p.get("is_medicube")]
+
+    for p in medicube_products:
+        log(f"[OliveYoung] ✅ Medicube 발견! 순위 {p['rank']}: {p['name'][:50]}")
+
+    log(f"[OliveYoung] 완료 - 총 {len(products)}개 중 Medicube {len(medicube_products)}개")
 
     return {
         "platform": "Olive Young Global",
-        "total_scanned": len(all_products),
+        "total_scanned": len(products),
         "medicube_count": len(medicube_products),
         "medicube_products": medicube_products,
-        "all_products_top20": all_products[:20],
+        "all_products_top20": products[:20],
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }

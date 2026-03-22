@@ -1,7 +1,6 @@
-"""TikTok Trend Tracker via Exolyt.com"""
+"""TikTok Trend Tracker - Direct TikTok hashtag page scraping via Selenium"""
 import time
 from datetime import datetime
-from typing import Optional
 
 try:
     from selenium import webdriver
@@ -10,7 +9,7 @@ try:
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from selenium.common.exceptions import TimeoutException, NoSuchElementException
+    from selenium.common.exceptions import TimeoutException
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -21,136 +20,74 @@ try:
 except ImportError:
     WDM_AVAILABLE = False
 
-from .config import EXOLYT_EMAIL, EXOLYT_PASSWORD, EXOLYT_HASHTAG_URL, EXOLYT_LOGIN_URL
+
+TIKTOK_TAG_URL = "https://www.tiktok.com/tag/medicube"
 
 
-def _create_driver(headless: bool = True) -> Optional[object]:
-    """Create a Chrome WebDriver instance."""
+def _create_driver(headless: bool = True):
+    """Create a stealth Chrome WebDriver. Returns None on failure."""
     if not SELENIUM_AVAILABLE:
         return None
-
-    options = Options()
-    if headless:
-        options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--window-size=1280,900")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-
     try:
+        options = Options()
+        if headless:
+            options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1366,768")
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-popup-blocking")
+
         if WDM_AVAILABLE:
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=options)
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()), options=options
+            )
         else:
             driver = webdriver.Chrome(options=options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        # Mask webdriver flag
+        driver.execute_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
         return driver
     except Exception:
         return None
 
 
-def login_exolyt(driver, log_callback=None) -> bool:
-    """Login to exolyt.com with stored credentials."""
-    def log(msg):
-        if log_callback:
-            log_callback(msg)
-        else:
-            print(msg)
-
-    try:
-        log("[TikTok] Exolyt 로그인 시도 중...")
-        driver.get(EXOLYT_LOGIN_URL)
-        wait = WebDriverWait(driver, 15)
-
-        # Accept cookies if present
-        try:
-            cookie_btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept') or contains(text(),'accept') or contains(text(),'OK')]"))
-            )
-            cookie_btn.click()
-            time.sleep(1)
-        except TimeoutException:
-            pass
-
-        # Find email field
-        email_field = wait.until(EC.presence_of_element_located(
-            (By.XPATH, "//input[@type='email' or @name='email' or @placeholder='Email' or contains(@placeholder,'email')]")
-        ))
-        email_field.clear()
-        email_field.send_keys(EXOLYT_EMAIL)
-        time.sleep(0.5)
-
-        # Find password field
-        pw_field = driver.find_element(
-            By.XPATH, "//input[@type='password' or @name='password']"
-        )
-        pw_field.clear()
-        pw_field.send_keys(EXOLYT_PASSWORD)
-        time.sleep(0.5)
-
-        # Submit
-        submit_btn = driver.find_element(
-            By.XPATH, "//button[@type='submit' or contains(text(),'Login') or contains(text(),'로그인') or contains(text(),'Sign in')]"
-        )
-        submit_btn.click()
-        time.sleep(3)
-
-        # Verify login success
-        if "login" not in driver.current_url.lower():
-            log("[TikTok] 로그인 성공!")
-            return True
-        else:
-            log("[TikTok] 로그인 실패 - URL이 로그인 페이지에 머물러 있습니다.")
-            return False
-
-    except Exception as e:
-        log(f"[TikTok] 로그인 오류: {e}")
-        return False
-
-
-def _parse_number(text: str) -> Optional[int]:
-    """Parse numbers like '1.2M', '345K', '1,234,567'."""
+def _parse_number(text: str):
+    """Parse '1.2B', '345K', '12,345' → int. Returns None on failure."""
     if not text:
         return None
-    text = text.strip().replace(",", "")
+    text = text.strip().replace(",", "").replace(" ", "")
     try:
-        if text.endswith("B") or text.endswith("b"):
+        if text.upper().endswith("B"):
             return int(float(text[:-1]) * 1_000_000_000)
-        elif text.endswith("M") or text.endswith("m"):
+        if text.upper().endswith("M"):
             return int(float(text[:-1]) * 1_000_000)
-        elif text.endswith("K") or text.endswith("k"):
+        if text.upper().endswith("K"):
             return int(float(text[:-1]) * 1_000)
-        else:
-            return int(float(text))
-    except ValueError:
+        return int(float(text))
+    except (ValueError, TypeError):
         return None
 
 
 def fetch_tiktok_trends(log_callback=None, headless: bool = True) -> dict:
     """
-    Fetch TikTok hashtag statistics for #medicube from exolyt.com.
-    Returns dict with views, posts, avg_views, trending_videos etc.
+    Scrape TikTok hashtag page (#medicube) directly.
+    Returns dict with total_views, total_posts, trending_videos.
     """
     def log(msg):
         if log_callback:
             log_callback(msg)
         else:
             print(msg)
-
-    if not SELENIUM_AVAILABLE:
-        log("[TikTok] selenium이 설치되지 않았습니다. pip install selenium webdriver-manager")
-        return {"error": "selenium not installed"}
-
-    driver = _create_driver(headless=headless)
-    if driver is None:
-        log("[TikTok] Chrome WebDriver를 시작할 수 없습니다. Chrome이 설치되어 있는지 확인하세요.")
-        return {"error": "WebDriver not available"}
 
     result = {
         "hashtag": "medicube",
@@ -160,99 +97,111 @@ def fetch_tiktok_trends(log_callback=None, headless: bool = True) -> dict:
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
+    if not SELENIUM_AVAILABLE:
+        log("[TikTok] selenium이 설치되지 않았습니다. pip install selenium webdriver-manager")
+        result["error"] = "selenium not installed"
+        return result
+
+    driver = _create_driver(headless=headless)
+    if driver is None:
+        log("[TikTok] Chrome WebDriver를 시작할 수 없습니다.")
+        result["error"] = "WebDriver not available"
+        return result
+
     try:
-        # Login first
-        logged_in = login_exolyt(driver, log_callback)
+        log(f"[TikTok] 페이지 로딩 중: {TIKTOK_TAG_URL}")
+        driver.get(TIKTOK_TAG_URL)
+        time.sleep(5)
 
-        # Navigate to hashtag page
-        log(f"[TikTok] 해시태그 페이지 로딩: {EXOLYT_HASHTAG_URL}")
-        driver.get(EXOLYT_HASHTAG_URL)
-        time.sleep(4)
-
-        wait = WebDriverWait(driver, 20)
-
-        # Try to get total views
-        selectors_views = [
-            "//*[contains(text(),'views') or contains(text(),'Views')]/preceding-sibling::*",
-            "//*[contains(@class,'stat') or contains(@class,'metric')]",
-            "//*[contains(@class,'views')]",
-        ]
-
-        # Scroll down to load content
-        driver.execute_script("window.scrollTo(0, 300)")
+        # Scroll down to load video cards
+        driver.execute_script("window.scrollTo(0, 400);")
         time.sleep(2)
 
-        # Extract stats from page
-        page_source = driver.page_source
-
-        # Try multiple approaches to find stats
+        # ── Try data-e2e attributes (TikTok's stable attribute) ──────────────
+        # TikTok uses data-e2e="challenge-vvcount" for view count
+        # and data-e2e="challenge-item-count" or similar for post count
         try:
-            stats_elements = driver.find_elements(
-                By.XPATH,
-                "//*[contains(@class,'stat') or contains(@class,'metric') or contains(@class,'count') or contains(@class,'number')]"
-            )
-            for el in stats_elements[:20]:
-                text = el.text.strip()
-                if text and any(c.isdigit() for c in text):
-                    log(f"[TikTok] 통계 요소 발견: {text}")
-        except Exception:
-            pass
-
-        # Try to find hashtag stats directly
-        try:
-            # Look for the main stats section
-            stat_blocks = driver.find_elements(By.CSS_SELECTOR, "[class*='stat'], [class*='metric'], [class*='count']")
-            for block in stat_blocks[:10]:
-                txt = block.text
+            wait = WebDriverWait(driver, 8)
+            # View count
+            vv_els = driver.find_elements(By.CSS_SELECTOR, "[data-e2e='challenge-vvcount']")
+            for el in vv_els:
+                txt = el.text.strip()
                 if txt:
-                    num = _parse_number(txt.split()[0]) if txt.split() else None
-                    if num and num > 1000:
-                        if result["total_views"] is None:
-                            result["total_views"] = num
-                        elif result["total_posts"] is None:
-                            result["total_posts"] = num
-        except Exception:
-            pass
+                    num = _parse_number(txt.split()[0])
+                    if num:
+                        result["total_views"] = num
+                        log(f"[TikTok] 총 조회수: {num:,}")
+                        break
 
-        # Try to find video cards
-        try:
-            video_elements = driver.find_elements(
-                By.XPATH,
-                "//a[contains(@href,'tiktok.com') or contains(@href,'/video/')]"
+            # Post / video count
+            post_els = driver.find_elements(
+                By.CSS_SELECTOR,
+                "[data-e2e='challenge-video-count'], [data-e2e='challenge-item-count']"
             )
-            for el in video_elements[:10]:
-                href = el.get_attribute("href") or ""
-                text = el.text.strip()
-                if href:
-                    result["trending_videos"].append({"url": href, "text": text})
-        except Exception:
-            pass
+            for el in post_els:
+                txt = el.text.strip()
+                if txt:
+                    num = _parse_number(txt.split()[0])
+                    if num:
+                        result["total_posts"] = num
+                        log(f"[TikTok] 게시물 수: {num:,}")
+                        break
+        except Exception as e:
+            log(f"[TikTok] data-e2e 파싱 오류: {e}")
 
-        # Fallback: try BeautifulSoup on page source
+        # ── Fallback: search all text nodes for large numbers ─────────────────
+        if result["total_views"] is None:
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(driver.page_source, "lxml")
+
+                # Look for prominent stat numbers (B/M/K suffixed)
+                candidates = []
+                for tag in soup.find_all(["strong", "h1", "h2", "span", "p"]):
+                    txt = tag.get_text(strip=True)
+                    if not txt:
+                        continue
+                    first_token = txt.split()[0] if txt.split() else ""
+                    num = _parse_number(first_token)
+                    if num and num >= 10_000:
+                        candidates.append((num, txt))
+
+                candidates.sort(key=lambda x: -x[0])
+                if candidates:
+                    result["total_views"] = candidates[0][0]
+                    log(f"[TikTok] 조회수 추정: {candidates[0][0]:,} (텍스트: {candidates[0][1][:30]})")
+                if len(candidates) > 1:
+                    result["total_posts"] = candidates[1][0]
+                    log(f"[TikTok] 게시물 추정: {candidates[1][0]:,}")
+            except Exception as e:
+                log(f"[TikTok] 대체 파싱 오류: {e}")
+
+        # ── Trending video links ───────────────────────────────────────────────
         try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(page_source, "lxml")
-
-            # Look for numbers in prominent positions
-            for tag in soup.find_all(["h1", "h2", "h3", "strong", "b", "span"]):
-                text = tag.get_text(strip=True)
-                if text and any(c.isdigit() for c in text):
-                    num = _parse_number(text.replace(" ", ""))
-                    if num and num > 100_000:
-                        if "view" in str(tag).lower() or result["total_views"] is None:
-                            if result["total_views"] is None:
-                                result["total_views"] = num
-                                log(f"[TikTok] 총 조회수 (추정): {num:,}")
-                            elif result["total_posts"] is None and num < result["total_views"]:
-                                result["total_posts"] = num
-                                log(f"[TikTok] 총 게시물 수 (추정): {num:,}")
+            video_links = driver.find_elements(
+                By.CSS_SELECTOR,
+                "a[href*='/video/'], a[href*='/@']"
+            )
+            seen = set()
+            for el in video_links[:30]:
+                href = el.get_attribute("href") or ""
+                if "/video/" in href and href not in seen:
+                    seen.add(href)
+                    result["trending_videos"].append({
+                        "url": href,
+                        "text": el.text.strip()[:100],
+                    })
+                    if len(result["trending_videos"]) >= 10:
+                        break
         except Exception:
             pass
 
-        log(f"[TikTok] 데이터 수집 완료 - 조회수: {result['total_views']}, 게시물: {result['total_posts']}")
+        views_disp = f"{result['total_views']:,}" if result["total_views"] else "수집 불가"
+        posts_disp = f"{result['total_posts']:,}" if result["total_posts"] else "수집 불가"
+        log(f"[TikTok] ✅ 완료 - 조회수: {views_disp} / 게시물: {posts_disp}")
 
     except Exception as e:
-        log(f"[TikTok] 오류 발생: {e}")
+        log(f"[TikTok] 오류: {e}")
         result["error"] = str(e)
     finally:
         try:
