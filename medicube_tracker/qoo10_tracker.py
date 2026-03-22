@@ -1,4 +1,4 @@
-"""Qoo10 Japan Bestseller Tracker - requests + Selenium fallback"""
+"""Qoo10 Japan Bestseller Tracker - Selenium primary, requests fallback"""
 import time
 import random
 import requests
@@ -10,8 +10,12 @@ from .config import QOO10_URLS, BRAND_KEYWORDS, HEADERS
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 
-# Qoo10.jp beauty bestseller category URLs to try in order
-_BEAUTY_URLS = QOO10_URLS
+_BEAUTY_URLS = [
+    "https://www.qoo10.jp/gmkt.inc/BestSellers/?g=2",
+    "https://www.qoo10.jp/gmkt.inc/BestSellers/?g=28000",
+    "https://www.qoo10.jp/gmkt.inc/BestSellers/",
+    "https://www.qoo10.jp/sr/SearchResult.aspx?keyword=medicube&sort=W",
+]
 
 _HEADERS = {
     **HEADERS,
@@ -20,25 +24,39 @@ _HEADERS = {
 }
 
 
-# ─── Requests-based fetch ─────────────────────────────────────────────────────
-
-def _fetch_html(url: str, session: requests.Session, log_callback=None) -> str | None:
-    def log(m):
-        if log_callback: log_callback(m)
-        else: print(m)
+def _make_driver():
     try:
-        resp = session.get(url, timeout=20)
-        if resp.status_code == 200:
-            return resp.text
-        log(f"[Qoo10] HTTP {resp.status_code} ({url})")
-        return None
-    except requests.RequestException as e:
-        log(f"[Qoo10] 네트워크 오류: {e}")
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1366,768")
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument("--lang=ja-JP")
+
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        except Exception:
+            driver = webdriver.Chrome(options=options)
+
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        return driver
+    except Exception:
         return None
 
 
 def _parse_products(html: str, log_callback=None) -> list[dict]:
-    """Extract product list from Qoo10 bestseller HTML."""
     def log(m):
         if log_callback: log_callback(m)
         else: print(m)
@@ -46,7 +64,7 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     products = []
 
-    # Selector priority list for Qoo10.jp
+    # Updated selector list for Qoo10.jp
     selectors = [
         "ul.best_list li",
         "ul.list_goods li",
@@ -54,45 +72,58 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
         ".goods_item",
         ".ranking_item",
         "li.item",
+        ".item_area",
         "[class*='best'] li",
         "[class*='ranking'] li",
         "li[class*='item']",
+        ".goods_wrap li",
+        "#bestRankList li",
+        ".rank_list li",
+        ".prd_list li",
+        "ul.rank li",
+        # Qoo10 may render table-based
+        "table.best_table tr",
+        "tbody tr",
     ]
 
     items = []
     for sel in selectors:
         found = soup.select(sel)
-        if found and len(found) > 3:
+        if found and len(found) > 2:
             log(f"[Qoo10] 셀렉터 '{sel}'로 {len(found)}개 발견")
             items = found
             break
 
     if not items:
-        # Fallback: look for anchor tags pointing to product pages
+        # Fallback: product links
         items = [
             a for a in soup.find_all("a", href=True)
-            if any(x in str(a.get("href", "")).lower() for x in ["goods_no=", "/g/", "item"])
+            if any(x in str(a.get("href", "")).lower() for x in ["goods_no=", "/g/", "item", "goods"])
         ]
         if items:
             log(f"[Qoo10] 링크 방식으로 {len(items)}개 발견")
 
+    if not items:
+        # Last resort: check if page contains medicube text
+        page_text = soup.get_text().lower()
+        if any(kw in page_text for kw in BRAND_KW):
+            log(f"[Qoo10] 페이지에서 medicube 키워드 발견 (구조 파싱 불가)")
+        return []
+
     for rank, item in enumerate(items[:100], 1):
         text = item.get_text(" ", strip=True)
-        if not text:
+        if not text or len(text) < 3:
             continue
 
-        # Product name
         name_el = (
-            item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "goods_nm"]))
-            or item.find(["h2", "h3", "h4", "strong", "span"])
+            item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "goods_nm", "subject"]))
+            or item.find(["h2", "h3", "h4", "strong", "span", "p"])
         )
         name = name_el.get_text(strip=True) if name_el else text[:80]
 
-        # Price
         price_el = item.find(class_=lambda c: c and "price" in c.lower())
         price = price_el.get_text(strip=True) if price_el else ""
 
-        # Link
         link_el = item if item.name == "a" else item.find("a", href=True)
         url_link = ""
         if link_el:
@@ -112,7 +143,57 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
     return products
 
 
-def _fetch_via_requests(log_callback=None) -> dict | None:
+def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
+
+    driver = _make_driver()
+    if driver is None:
+        log("[Qoo10] Selenium 드라이버 시작 실패")
+        return None
+
+    try:
+        for url in _BEAUTY_URLS[:3]:  # skip search URL for bestseller
+            log(f"[Qoo10] Selenium 로딩: {url}")
+            driver.get(url)
+            time.sleep(random.uniform(4, 6))
+
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
+            time.sleep(1.5)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+
+            products = _parse_products(driver.page_source, log_callback)
+            if products:
+                log(f"[Qoo10] Selenium 성공: {len(products)}개")
+                return products
+
+        # If bestseller failed, try search for medicube
+        log("[Qoo10] 베스트셀러 파싱 실패 → 메디큐브 직접 검색 시도...")
+        search_url = "https://www.qoo10.jp/sr/SearchResult.aspx?keyword=medicube&sort=W"
+        driver.get(search_url)
+        time.sleep(random.uniform(4, 5))
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
+
+        products = _parse_products(driver.page_source, log_callback)
+        if products:
+            log(f"[Qoo10] 검색 결과: {len(products)}개")
+            return products
+
+    except Exception as e:
+        log(f"[Qoo10] Selenium 오류: {e}")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+    return None
+
+
+def _fetch_via_requests(log_callback=None) -> list[dict] | None:
     def log(m):
         if log_callback: log_callback(m)
         else: print(m)
@@ -121,81 +202,32 @@ def _fetch_via_requests(log_callback=None) -> dict | None:
     session.headers.update(_HEADERS)
 
     for url in _BEAUTY_URLS:
-        log(f"[Qoo10] 시도: {url}")
-        html = _fetch_html(url, session, log_callback)
-        if not html:
-            continue
+        log(f"[Qoo10] requests 시도: {url}")
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code != 200:
+                log(f"[Qoo10] HTTP {resp.status_code}")
+                continue
 
-        products = _parse_products(html, log_callback)
-        if products:
-            return products
+            products = _parse_products(resp.text, log_callback)
+            if products:
+                return products
 
-        # Even if no structured items, try raw text search
-        raw_lower = html.lower()
-        hits = sum(raw_lower.count(kw) for kw in BRAND_KW)
-        if hits > 0:
-            log(f"[Qoo10] 텍스트에서 medicube {hits}회 검출 (구조 파싱 실패)")
+            raw_lower = resp.text.lower()
+            hits = sum(raw_lower.count(kw) for kw in BRAND_KW)
+            if hits > 0:
+                log(f"[Qoo10] 텍스트에서 medicube {hits}회 검출 (구조 파싱 실패)")
+
+        except requests.RequestException as e:
+            log(f"[Qoo10] 네트워크 오류: {e}")
 
     return None
 
-
-# ─── Selenium fallback ────────────────────────────────────────────────────────
-
-def _fetch_via_selenium(log_callback=None) -> dict | None:
-    def log(m):
-        if log_callback: log_callback(m)
-        else: print(m)
-
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-
-        options = Options()
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--window-size=1366,768")
-        options.add_argument(
-            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-        )
-        options.add_argument("--lang=ja")
-
-        try:
-            from webdriver_manager.chrome import ChromeDriverManager
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        except Exception:
-            driver = webdriver.Chrome(options=options)
-
-        try:
-            for url in _BEAUTY_URLS:
-                log(f"[Qoo10] Selenium 시도: {url}")
-                driver.get(url)
-                time.sleep(4)
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(2)
-
-                products = _parse_products(driver.page_source, log_callback)
-                if products:
-                    return products
-        finally:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-    except Exception as e:
-        log(f"[Qoo10] Selenium 오류: {e}")
-
-    return None
-
-
-# ─── Public API ───────────────────────────────────────────────────────────────
 
 def fetch_qoo10_rankings(log_callback=None) -> dict:
     """
     Fetch Qoo10 Japan beauty bestseller rankings.
-    Tries requests first; falls back to Selenium.
+    Uses Selenium as primary (JavaScript rendering), falls back to requests.
     """
     def log(m):
         if log_callback: log_callback(m)
@@ -203,11 +235,12 @@ def fetch_qoo10_rankings(log_callback=None) -> dict:
 
     log("[Qoo10] 큐텐재팬 뷰티 베스트셀러 수집 중...")
 
-    products = _fetch_via_requests(log_callback)
+    # Try Selenium first (handles JS rendering)
+    products = _fetch_via_selenium(log_callback)
 
     if not products:
-        log("[Qoo10] requests 실패 → Selenium 재시도...")
-        products = _fetch_via_selenium(log_callback)
+        log("[Qoo10] Selenium 실패 → requests 재시도...")
+        products = _fetch_via_requests(log_callback)
 
     if not products:
         log("[Qoo10] 데이터 수집 실패")

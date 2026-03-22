@@ -1,23 +1,27 @@
-"""Olive Young Global Bestseller Tracker - Selenium (React app) + requests fallback"""
+"""Olive Young Global Bestseller Tracker - Selenium primary (React app)"""
 import time
+import json
 import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-from .config import OLIVEYOUNG_URL, BRAND_KEYWORDS, HEADERS
+from .config import BRAND_KEYWORDS, HEADERS
 
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 
-# Olive Young Global URLs to try
 _OY_URLS = [
     "https://global.oliveyoung.com/display/page/best-seller",
     "https://global.oliveyoung.com/display/page/best-seller?target=pillsTab1Nav1",
-    "https://global.oliveyoung.com/product/lists?cate_no=01",  # category list
+    "https://global.oliveyoung.com/product/lists?cate_no=01",
 ]
 
+# Olive Young Global API endpoints (React app data source)
+_OY_API_URLS = [
+    "https://global.oliveyoung.com/api/display/best-seller",
+    "https://global.oliveyoung.com/api/product/list?cate_no=01&sort=ranking",
+]
 
-# ─── Selenium-based fetch (primary - React app) ───────────────────────────────
 
 def _make_driver(headless: bool = True):
     try:
@@ -31,13 +35,14 @@ def _make_driver(headless: bool = True):
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--window-size=1366,900")
+        options.add_argument("--window-size=1440,900")
         options.add_argument(
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument("--lang=en-US")
 
         try:
             from webdriver_manager.chrome import ChromeDriverManager
@@ -52,14 +57,13 @@ def _make_driver(headless: bool = True):
 
 
 def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[dict]:
-    """Parse product items from BeautifulSoup object."""
     def log(m):
         if log_callback: log_callback(m)
         else: print(m)
 
     products = []
 
-    # Selector priority list for Olive Young Global
+    # Updated selectors for Olive Young Global (React app)
     selectors = [
         ".prd_info",
         ".product-item",
@@ -70,49 +74,55 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
         ".prd_wrap",
         "li[class*='item']",
         "[class*='product']",
+        "[class*='goods']",
         "article",
+        ".result_list_wrap li",
+        ".grid_item",
+        ".swiper-slide",
+        "ul.list_item li",
     ]
 
     items = []
     for sel in selectors:
         found = soup.select(sel)
-        if found and len(found) > 3:
+        if found and len(found) > 2:
             log(f"[OliveYoung] 셀렉터 '{sel}'로 {len(found)}개 발견")
             items = found
             break
 
     if not items:
-        # Fallback: any div/li with product-like class names
         items = soup.find_all(
             ["li", "div"],
             class_=lambda c: c and any(
-                x in " ".join(c).lower() for x in ["product", "prd", "goods", "item"]
+                x in " ".join(c if isinstance(c, list) else [c]).lower()
+                for x in ["product", "prd", "goods", "item", "card"]
             ),
         )
         if items:
             log(f"[OliveYoung] 대체 파싱: {len(items)}개 발견")
 
+    seen_names = set()
     for rank, item in enumerate(items[:100], 1):
         text = item.get_text(" ", strip=True)
         if not text or len(text) < 5:
             continue
 
-        # Brand
         brand_el = item.find(class_=lambda c: c and "brand" in c.lower())
         brand = brand_el.get_text(strip=True) if brand_el else ""
 
-        # Product name
         name_el = (
-            item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "prd_name"]))
-            or item.find(["h2", "h3", "h4", "p", "span"])
+            item.find(class_=lambda c: c and any(x in c.lower() for x in ["name", "title", "prd_name", "goods_name"]))
+            or item.find(["h2", "h3", "h4", "p"])
         )
         name = name_el.get_text(strip=True) if name_el else text[:80]
 
-        # Price
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
         price_el = item.find(class_=lambda c: c and "price" in c.lower())
         price = price_el.get_text(strip=True) if price_el else ""
 
-        # URL
         link_el = item.find("a", href=True)
         url = ""
         if link_el:
@@ -146,34 +156,37 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
     products = []
     try:
         for url in _OY_URLS:
-            log(f"[OliveYoung] Selenium 로딩: {url}")
+            log(f"[OliveYoung] 로딩: {url}")
             driver.get(url)
 
-            # Wait for React to hydrate
-            time.sleep(6)
+            # Wait for React to render (longer wait)
+            time.sleep(8)
 
-            # Scroll to trigger lazy-load
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
-            time.sleep(2)
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-            driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(1)
+            # Multiple scroll passes to trigger lazy-loading
+            for _ in range(3):
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
+                time.sleep(1.5)
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1.5)
+                driver.execute_script("window.scrollTo(0, 0);")
+                time.sleep(1)
 
             soup = BeautifulSoup(driver.page_source, "lxml")
             products = _parse_products_from_soup(soup, log_callback)
 
             if products:
-                log(f"[OliveYoung] Selenium 성공: {len(products)}개")
+                log(f"[OliveYoung] 성공: {len(products)}개")
                 break
 
         if not products:
-            # Last resort: full text search in page source
             log("[OliveYoung] 구조 파싱 실패 → 텍스트 검색 시도...")
-            body_text = driver.find_element("tag name", "body").text.lower()
-            hits = sum(body_text.count(kw) for kw in BRAND_KW)
-            if hits > 0:
-                log(f"[OliveYoung] 페이지에서 'medicube' {hits}회 발견 (구조 파싱 안됨)")
+            try:
+                body_text = driver.find_element("tag name", "body").text.lower()
+                hits = sum(body_text.count(kw) for kw in BRAND_KW)
+                if hits > 0:
+                    log(f"[OliveYoung] 페이지에서 'medicube' {hits}회 발견 (구조 파싱 불가)")
+            except Exception:
+                pass
 
     except Exception as e:
         log(f"[OliveYoung] Selenium 오류: {e}")
@@ -187,17 +200,46 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
 
 
 def _fetch_via_requests(log_callback=None) -> list[dict] | None:
-    """Try requests+BS4 (works only if Olive Young renders server-side for this path)."""
     def log(m):
         if log_callback: log_callback(m)
         else: print(m)
 
     session = requests.Session()
-    session.headers.update({
+    headers = {
         **HEADERS,
         "Referer": "https://global.oliveyoung.com/",
-    })
+        "Accept": "application/json, text/html, */*",
+    }
+    session.headers.update(headers)
 
+    # Try API endpoints first
+    for api_url in _OY_API_URLS:
+        try:
+            resp = session.get(api_url, timeout=15)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    products = []
+                    # Parse JSON structure
+                    items = data if isinstance(data, list) else data.get("list", data.get("data", data.get("products", [])))
+                    if isinstance(items, list):
+                        for rank, item in enumerate(items[:100], 1):
+                            name = item.get("goodsName", item.get("name", item.get("goods_name", "")))
+                            brand = item.get("brandName", item.get("brand", ""))
+                            price = str(item.get("price", item.get("salePrice", "")))
+                            text = f"{brand} {name}".lower()
+                            is_medicube = any(kw in text for kw in BRAND_KW)
+                            products.append({"rank": rank, "brand": brand, "name": name,
+                                             "price": price, "url": "", "is_medicube": is_medicube})
+                        if products:
+                            log(f"[OliveYoung] API 성공: {len(products)}개")
+                            return products
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+        except requests.RequestException:
+            continue
+
+    # Try HTML pages
     for url in _OY_URLS:
         try:
             resp = session.get(url, timeout=20)
@@ -206,7 +248,7 @@ def _fetch_via_requests(log_callback=None) -> list[dict] | None:
             soup = BeautifulSoup(resp.text, "lxml")
             products = _parse_products_from_soup(soup, log_callback)
             if products:
-                log(f"[OliveYoung] requests 성공: {len(products)}개")
+                log(f"[OliveYoung] HTML 성공: {len(products)}개")
                 return products
         except requests.RequestException:
             continue
@@ -214,25 +256,21 @@ def _fetch_via_requests(log_callback=None) -> list[dict] | None:
     return None
 
 
-# ─── Public API ───────────────────────────────────────────────────────────────
-
 def fetch_oliveyoung_rankings(log_callback=None) -> dict:
     """
     Fetch Olive Young Global bestseller rankings.
-    Uses Selenium (primary) since the site is React-rendered.
-    Falls back to requests if Selenium is unavailable.
+    Uses Selenium (primary - React app), falls back to requests.
     """
     def log(m):
         if log_callback: log_callback(m)
         else: print(m)
 
-    log("[OliveYoung] 올리브영 글로벌 베스트셀러 수집 중 (Selenium)...")
+    log("[OliveYoung] 올리브영 글로벌 베스트셀러 수집 중...")
 
-    # Try Selenium first (React app needs JS execution)
     products = _fetch_via_selenium(log_callback)
 
     if not products:
-        log("[OliveYoung] Selenium 실패 → requests 시도...")
+        log("[OliveYoung] Selenium 실패 → requests/API 시도...")
         products = _fetch_via_requests(log_callback)
 
     if not products:

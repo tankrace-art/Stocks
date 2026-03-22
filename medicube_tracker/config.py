@@ -4,14 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Exolyt (TikTok trends) credentials - kept for reference but no longer used
-EXOLYT_EMAIL = os.getenv("EXOLYT_EMAIL", "")
-EXOLYT_PASSWORD = os.getenv("EXOLYT_PASSWORD", "")
+# Exolyt (TikTok analytics) credentials
+EXOLYT_EMAIL = os.getenv("EXOLYT_EMAIL", "hoyounggal@khnp.co.kr")
+EXOLYT_PASSWORD = os.getenv("EXOLYT_PASSWORD", "82017rkf!")
 EXOLYT_HASHTAG_URL = "https://exolyt.com/hashtags/medicube"
-EXOLYT_LOGIN_URL = "https://exolyt.com/login"
+EXOLYT_LOGIN_URL = "https://exolyt.com/en/login"
 
 # Target brand keywords
-BRAND_KEYWORDS = ["medicube", "Medicube", "메디큐브"]
+BRAND_KEYWORDS = ["medicube", "Medicube", "메디큐브", "메디뷰트"]
 APR_BRANDS = ["medicube", "d'alba", "ANUA", "celimax", "BIODANCE"]
 
 # Amazon country configurations (Beauty Top 100)
