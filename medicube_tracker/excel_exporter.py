@@ -188,8 +188,29 @@ def _create_google_trends_sheet(wb: openpyxl.Workbook, trends_data: dict):
 
 
 
+COLOR_ANUA_BG = "E8F5E9"
+COLOR_ANUA_FG = "1B5E20"
+
+
+def _write_brand_block(ws, start_row: int, brand_name: str, products: list, bg_color: str):
+    """Write a brand's product list block into the sheet."""
+    ws.cell(row=start_row, column=1).value = f"{brand_name} 제품 목록"
+    ws.cell(row=start_row, column=1).font = Font(bold=True, size=11, name="맑은 고딕", color="1F3864")
+    headers = ["순위", "브랜드", "상품명", "가격", "URL"]
+    for col, h in enumerate(headers, 1):
+        _style_header_cell(ws.cell(row=start_row + 1, column=col), h, COLOR_SUBHEADER_BG)
+    for i, p in enumerate(products):
+        r = start_row + 2 + i
+        _style_data_cell(ws.cell(row=r, column=1), p.get("rank", ""), bg_color, bold=True)
+        _style_data_cell(ws.cell(row=r, column=2), p.get("brand", ""), bg_color, align="left")
+        _style_data_cell(ws.cell(row=r, column=3), p.get("name", "")[:80], bg_color, align="left")
+        _style_data_cell(ws.cell(row=r, column=4), p.get("price", ""), bg_color)
+        _style_data_cell(ws.cell(row=r, column=5), p.get("url", ""), bg_color, align="left")
+    return start_row + 2 + len(products)
+
+
 def _create_platform_sheet(wb: openpyxl.Workbook, data: dict, sheet_name: str):
-    """Generic sheet for Qoo10 / Olive Young."""
+    """Generic sheet for Qoo10 / Olive Young - shows Medicube & Anua."""
     ws = wb.create_sheet(sheet_name)
     fetched_at = data.get("fetched_at", "")
     platform = data.get("platform", sheet_name)
@@ -198,7 +219,7 @@ def _create_platform_sheet(wb: openpyxl.Workbook, data: dict, sheet_name: str):
     _style_header_cell(ws["A1"], f"{platform} 베스트셀러  (수집: {fetched_at})", size=13)
     ws.row_dimensions[1].height = 28
 
-    # Summary
+    # Summary row
     ws["A3"] = "Medicube 제품 수"
     ws["A3"].font = Font(bold=True, size=11, name="맑은 고딕")
     ws["B3"] = data.get("medicube_count", 0)
@@ -206,38 +227,43 @@ def _create_platform_sheet(wb: openpyxl.Workbook, data: dict, sheet_name: str):
     ws["C3"] = f"/ 전체 {data.get('total_scanned', 0)}개 중"
     ws["C3"].font = Font(size=10, name="맑은 고딕")
 
-    # Medicube products
+    ws["D3"] = "Anua 제품 수"
+    ws["D3"].font = Font(bold=True, size=11, name="맑은 고딕")
+    ws["E3"] = data.get("anua_count", 0)
+    ws["E3"].font = Font(bold=True, size=14, color=COLOR_ANUA_FG, name="맑은 고딕")
+
+    # Medicube products block
     medicube_products = data.get("medicube_products", [])
+    next_row = 5
     if medicube_products:
-        row = 5
-        ws.cell(row=row, column=1).value = "Medicube 제품 목록"
-        ws.cell(row=row, column=1).font = Font(bold=True, size=11, name="맑은 고딕", color="1F3864")
-        headers = ["순위", "브랜드", "상품명", "가격", "URL"]
-        for col, h in enumerate(headers, 1):
-            _style_header_cell(ws.cell(row=row + 1, column=col), h, COLOR_SUBHEADER_BG)
-        for i, p in enumerate(medicube_products):
-            r = row + 2 + i
-            bg = COLOR_MEDICUBE_BG
-            _style_data_cell(ws.cell(row=r, column=1), p.get("rank", ""), bg, bold=True)
-            _style_data_cell(ws.cell(row=r, column=2), p.get("brand", ""), bg, align="left")
-            _style_data_cell(ws.cell(row=r, column=3), p.get("name", "")[:80], bg, align="left")
-            _style_data_cell(ws.cell(row=r, column=4), p.get("price", ""), bg)
-            _style_data_cell(ws.cell(row=r, column=5), p.get("url", ""), bg, align="left")
+        next_row = _write_brand_block(ws, next_row, "Medicube", medicube_products, COLOR_MEDICUBE_BG)
+        next_row += 2  # gap
+
+    # Anua products block
+    anua_products = data.get("anua_products", [])
+    if anua_products:
+        next_row = _write_brand_block(ws, next_row, "Anua", anua_products, COLOR_ANUA_BG)
+        next_row += 2  # gap
 
     # All top 20
     all_top = data.get("all_products_top20", [])
-    row_start = 5 + len(medicube_products) + 4 if medicube_products else 5
     if all_top:
-        ws.cell(row=row_start, column=1).value = "전체 Top 20 제품"
-        ws.cell(row=row_start, column=1).font = Font(bold=True, size=11, name="맑은 고딕")
+        ws.cell(row=next_row, column=1).value = "전체 Top 20 제품"
+        ws.cell(row=next_row, column=1).font = Font(bold=True, size=11, name="맑은 고딕")
         headers = ["순위", "브랜드", "상품명", "가격", "URL"]
         for col, h in enumerate(headers, 1):
-            _style_header_cell(ws.cell(row=row_start + 1, column=col), h, "4472C4")
+            _style_header_cell(ws.cell(row=next_row + 1, column=col), h, "4472C4")
         for i, p in enumerate(all_top):
-            r = row_start + 2 + i
+            r = next_row + 2 + i
             is_med = p.get("is_medicube", False)
-            bg = COLOR_MEDICUBE_BG if is_med else (COLOR_ROW_ALT if i % 2 == 0 else None)
-            bold = is_med
+            is_anua = p.get("is_anua", False)
+            if is_med:
+                bg = COLOR_MEDICUBE_BG
+            elif is_anua:
+                bg = COLOR_ANUA_BG
+            else:
+                bg = COLOR_ROW_ALT if i % 2 == 0 else None
+            bold = is_med or is_anua
             _style_data_cell(ws.cell(row=r, column=1), p.get("rank", ""), bg, bold=bold)
             _style_data_cell(ws.cell(row=r, column=2), p.get("brand", ""), bg, align="left", bold=bold)
             _style_data_cell(ws.cell(row=r, column=3), p.get("name", "")[:80], bg, align="left", bold=bold)
@@ -309,15 +335,21 @@ def _create_summary_sheet(wb: openpyxl.Workbook, all_data: dict, report_date: st
         ("Olive Young Global", all_data.get("oliveyoung", {})),
     ]
     for p_idx, (platform_name, p_data) in enumerate(platforms):
-        r = last_row + p_idx * 3
+        r = last_row + p_idx * 4
         _style_header_cell(ws.cell(row=r, column=1), platform_name, COLOR_SUBHEADER_BG)
         ws.merge_cells(f"A{r}:H{r}")
+        # Medicube
         ws.cell(row=r + 1, column=1).value = "Medicube 제품 수"
         ws.cell(row=r + 1, column=1).font = Font(size=10, name="맑은 고딕")
         ws.cell(row=r + 1, column=2).value = p_data.get("medicube_count", "N/A")
         ws.cell(row=r + 1, column=2).font = Font(bold=True, size=14, color="2F5496", name="맑은 고딕")
         ws.cell(row=r + 1, column=3).value = f"/ 전체 {p_data.get('total_scanned', 0)}개"
         ws.cell(row=r + 1, column=3).font = Font(size=10, name="맑은 고딕")
+        # Anua
+        ws.cell(row=r + 2, column=1).value = "Anua 제품 수"
+        ws.cell(row=r + 2, column=1).font = Font(size=10, name="맑은 고딕")
+        ws.cell(row=r + 2, column=2).value = p_data.get("anua_count", "N/A")
+        ws.cell(row=r + 2, column=2).font = Font(bold=True, size=14, color="1B5E20", name="맑은 고딕")
 
     # Column widths for summary
     for col in ["A", "B", "C", "D", "E", "F", "G", "H"]:

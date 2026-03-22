@@ -5,10 +5,11 @@ import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-from .config import QOO10_URLS, BRAND_KEYWORDS, HEADERS
+from .config import QOO10_URLS, BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS
 
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
+ANUA_KW = [kw.lower() for kw in ANUA_KEYWORDS]
 
 # 베스트셀러 URL: &page=N 또는 &pageNum=N 로 페이지네이션
 _BEAUTY_URLS = [
@@ -107,10 +108,12 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
             log(f"[Qoo10] 링크 방식으로 {len(items)}개 발견")
 
     if not items:
-        # Last resort: check if page contains medicube text
+        # Last resort: check if page contains brand text
         page_text = soup.get_text().lower()
         if any(kw in page_text for kw in BRAND_KW):
             log(f"[Qoo10] 페이지에서 medicube 키워드 발견 (구조 파싱 불가)")
+        elif any(kw in page_text for kw in ANUA_KW):
+            log(f"[Qoo10] 페이지에서 anua 키워드 발견 (구조 파싱 불가)")
         return []
 
     for rank, item in enumerate(items[:100], 1):
@@ -134,13 +137,16 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
             if url_link and not url_link.startswith("http"):
                 url_link = "https://www.qoo10.jp" + url_link
 
-        is_medicube = any(kw in text.lower() for kw in BRAND_KW)
+        tl = text.lower()
+        is_medicube = any(kw in tl for kw in BRAND_KW)
+        is_anua = any(kw in tl for kw in ANUA_KW)
         products.append({
             "rank": rank,
             "name": name,
             "price": price,
             "url": url_link,
             "is_medicube": is_medicube,
+            "is_anua": is_anua,
         })
 
     return products
@@ -313,11 +319,14 @@ def fetch_qoo10_rankings(log_callback=None) -> dict:
         }
 
     medicube_products = [p for p in products if p.get("is_medicube")]
+    anua_products = [p for p in products if p.get("is_anua")]
 
     for p in medicube_products:
         log(f"[Qoo10] ✅ Medicube 발견! 순위 {p['rank']}: {p['name'][:50]}")
+    for p in anua_products:
+        log(f"[Qoo10] ✅ Anua 발견! 순위 {p['rank']}: {p['name'][:50]}")
 
-    log(f"[Qoo10] 완료 - 총 {len(products)}개 중 Medicube {len(medicube_products)}개")
+    log(f"[Qoo10] 완료 - 총 {len(products)}개 중 Medicube {len(medicube_products)}개 / Anua {len(anua_products)}개")
 
     return {
         "platform": "Qoo10 Japan",
@@ -325,6 +334,8 @@ def fetch_qoo10_rankings(log_callback=None) -> dict:
         "total_scanned": len(products),
         "medicube_count": len(medicube_products),
         "medicube_products": medicube_products,
+        "anua_count": len(anua_products),
+        "anua_products": anua_products,
         "all_products_top20": products[:20],
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }

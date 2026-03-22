@@ -12,6 +12,11 @@ EXOLYT_LOGIN_URL = "https://exolyt.com/en/login"
 
 # Target brand keywords
 BRAND_KEYWORDS = ["medicube", "Medicube", "메디큐브", "메디뷰트"]
+ANUA_KEYWORDS = ["anua", "ANUA", "아누아"]
+
+# Brands tracked on Qoo10 & Olive Young
+QOO10_OY_BRANDS = ["medicube", "anua"]
+
 APR_BRANDS = ["medicube", "d'alba", "ANUA", "celimax", "BIODANCE"]
 
 # Amazon country configurations (Beauty Top 100)

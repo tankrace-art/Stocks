@@ -5,10 +5,11 @@ import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-from .config import BRAND_KEYWORDS, HEADERS
+from .config import BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS
 
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
+ANUA_KW = [kw.lower() for kw in ANUA_KEYWORDS]
 
 _OY_URLS = [
     "https://global.oliveyoung.com/display/page/best-seller",
@@ -132,7 +133,9 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
             if url and not url.startswith("http"):
                 url = "https://global.oliveyoung.com" + url
 
-        is_medicube = any(kw in text.lower() for kw in BRAND_KW)
+        tl = text.lower()
+        is_medicube = any(kw in tl for kw in BRAND_KW)
+        is_anua = any(kw in tl for kw in ANUA_KW)
         products.append({
             "rank": rank,
             "brand": brand,
@@ -140,6 +143,7 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
             "price": price,
             "url": url,
             "is_medicube": is_medicube,
+            "is_anua": is_anua,
         })
 
     return products
@@ -237,9 +241,12 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
             log("[OliveYoung] 구조 파싱 실패 → 텍스트 검색 시도...")
             try:
                 body_text = driver.find_element("tag name", "body").text.lower()
-                hits = sum(body_text.count(kw) for kw in BRAND_KW)
-                if hits > 0:
-                    log(f"[OliveYoung] 페이지에서 'medicube' {hits}회 발견 (구조 파싱 불가)")
+                hits_med = sum(body_text.count(kw) for kw in BRAND_KW)
+                hits_anua = sum(body_text.count(kw) for kw in ANUA_KW)
+                if hits_med > 0:
+                    log(f"[OliveYoung] 페이지에서 'medicube' {hits_med}회 발견 (구조 파싱 불가)")
+                if hits_anua > 0:
+                    log(f"[OliveYoung] 페이지에서 'anua' {hits_anua}회 발견 (구조 파싱 불가)")
             except Exception:
                 pass
 
@@ -283,9 +290,11 @@ def _fetch_via_requests(log_callback=None) -> list[dict] | None:
                             brand = item.get("brandName", item.get("brand", ""))
                             price = str(item.get("price", item.get("salePrice", "")))
                             text = f"{brand} {name}".lower()
-                            is_medicube = any(kw in text for kw in BRAND_KW)
+                            tl = text.lower()
+                            is_medicube = any(kw in tl for kw in BRAND_KW)
+                            is_anua = any(kw in tl for kw in ANUA_KW)
                             products.append({"rank": rank, "brand": brand, "name": name,
-                                             "price": price, "url": "", "is_medicube": is_medicube})
+                                             "price": price, "url": "", "is_medicube": is_medicube, "is_anua": is_anua})
                         if products:
                             log(f"[OliveYoung] API 성공: {len(products)}개")
                             return products
@@ -341,17 +350,22 @@ def fetch_oliveyoung_rankings(log_callback=None) -> dict:
         }
 
     medicube_products = [p for p in products if p.get("is_medicube")]
+    anua_products = [p for p in products if p.get("is_anua")]
 
     for p in medicube_products:
         log(f"[OliveYoung] ✅ Medicube 발견! 순위 {p['rank']}: {p['name'][:50]}")
+    for p in anua_products:
+        log(f"[OliveYoung] ✅ Anua 발견! 순위 {p['rank']}: {p['name'][:50]}")
 
-    log(f"[OliveYoung] 완료 - 총 {len(products)}개 중 Medicube {len(medicube_products)}개")
+    log(f"[OliveYoung] 완료 - 총 {len(products)}개 중 Medicube {len(medicube_products)}개 / Anua {len(anua_products)}개")
 
     return {
         "platform": "Olive Young Global",
         "total_scanned": len(products),
         "medicube_count": len(medicube_products),
         "medicube_products": medicube_products,
+        "anua_count": len(anua_products),
+        "anua_products": anua_products,
         "all_products_top20": products[:20],
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }

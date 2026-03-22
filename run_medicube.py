@@ -166,8 +166,10 @@ class MedicubeTrackerApp:
         result_items = [
             ("google", "Google Trends", "—"),
             ("amazon", "Amazon Medicube", "—"),
-            ("qoo10", "Qoo10 Medicube", "—"),
-            ("oliveyoung", "OliveYoung Medicube", "—"),
+            ("qoo10_medicube", "Qoo10 Medicube", "—"),
+            ("qoo10_anua", "Qoo10 Anua", "—"),
+            ("oy_medicube", "OliveYoung Medicube", "—"),
+            ("oy_anua", "OliveYoung Anua", "—"),
         ]
         for i, (key, label, default) in enumerate(result_items):
             card = tk.Frame(dash_cols, bg="#263850", relief="flat", bd=1)
@@ -318,12 +320,15 @@ class MedicubeTrackerApp:
                     from medicube_tracker.qoo10_tracker import fetch_qoo10_rankings
                     qoo10 = fetch_qoo10_rankings(log_callback=self._log_callback)
                     self._results["qoo10"] = qoo10
-                    cnt = qoo10.get("medicube_count", 0)
-                    self._update_result_label("qoo10", f"{cnt}개 발견")
+                    med_cnt = qoo10.get("medicube_count", 0)
+                    anua_cnt = qoo10.get("anua_count", 0)
+                    self._update_result_label("qoo10_medicube", f"{med_cnt}개 발견")
+                    self._update_result_label("qoo10_anua", f"{anua_cnt}개 발견")
                 except Exception as e:
                     self._log_callback(f"[Qoo10] 오류: {e}")
                     self._results["qoo10"] = {"error": str(e)}
-                    self._update_result_label("qoo10", "오류")
+                    self._update_result_label("qoo10_medicube", "오류")
+                    self._update_result_label("qoo10_anua", "오류")
                 step += 1
 
             # ── Olive Young ──────────────────────────────────────────────
@@ -333,12 +338,15 @@ class MedicubeTrackerApp:
                     from medicube_tracker.oliveyoung_tracker import fetch_oliveyoung_rankings
                     oy = fetch_oliveyoung_rankings(log_callback=self._log_callback)
                     self._results["oliveyoung"] = oy
-                    cnt = oy.get("medicube_count", 0)
-                    self._update_result_label("oliveyoung", f"{cnt}개 발견")
+                    med_cnt = oy.get("medicube_count", 0)
+                    anua_cnt = oy.get("anua_count", 0)
+                    self._update_result_label("oy_medicube", f"{med_cnt}개 발견")
+                    self._update_result_label("oy_anua", f"{anua_cnt}개 발견")
                 except Exception as e:
                     self._log_callback(f"[OliveYoung] 오류: {e}")
                     self._results["oliveyoung"] = {"error": str(e)}
-                    self._update_result_label("oliveyoung", "오류")
+                    self._update_result_label("oy_medicube", "오류")
+                    self._update_result_label("oy_anua", "오류")
                 step += 1
 
             # ── Export ────────────────────────────────────────────────────
