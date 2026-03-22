@@ -38,12 +38,15 @@ def _create_driver(headless: bool = True):
         options.add_argument("--window-size=1366,768")
         options.add_argument(
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-popup-blocking")
+        options.add_argument("--lang=en-US")
+        options.add_argument("--disable-web-security")
+        options.add_argument("--allow-running-insecure-content")
 
         if WDM_AVAILABLE:
             driver = webdriver.Chrome(
@@ -53,7 +56,9 @@ def _create_driver(headless: bool = True):
             driver = webdriver.Chrome(options=options)
 
         driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            "Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});"
+            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});"
         )
         return driver
     except Exception:

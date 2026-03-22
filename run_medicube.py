@@ -94,9 +94,9 @@ class MedicubeTrackerApp:
         # TikTok headless option
         tiktok_opts = tk.Frame(sources_frame, bg="#2A4A7F")
         tiktok_opts.pack(fill="x", padx=5)
-        self._headless_var = tk.BooleanVar(value=True)
+        self._headless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            tiktok_opts, text="TikTok: 브라우저 숨김(헤드리스) 모드",
+            tiktok_opts, text="TikTok: 브라우저 숨김(헤드리스) 모드  ※ 로그인 실패 시 체크 해제",
             variable=self._headless_var,
             font=("맑은 고딕", 9), fg="#AEC6E8", bg="#2A4A7F",
             selectcolor="#1F3864", activebackground="#2A4A7F",
