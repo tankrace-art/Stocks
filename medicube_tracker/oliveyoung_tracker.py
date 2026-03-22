@@ -157,7 +157,11 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
     real_rank = 0
     for item in items[:200]:
         text = item.get_text(" ", strip=True)
-        if not text or len(text) < 5:
+        if not text or len(text) < 8:
+            continue
+        # Skip navigation / UI elements
+        text_lower = text.lower()
+        if any(phrase in text_lower for phrase in _NAV_PHRASES):
             continue
 
         name_el = (
@@ -379,6 +383,15 @@ def _js_extract_products(driver, log) -> list[dict]:
         return []
 
 
+_NAV_PHRASES = {
+    "sign in", "sign up", "log in", "login", "register", "logout", "log out",
+    "track order", "track orders", "my wishlist", "my account", "my orders",
+    "shopping cart", "checkout", "view cart", "language", "currency",
+    "cookie", "privacy policy", "terms of service", "contact us", "help center",
+    "back to top", "all categories", "search",
+}
+
+
 def _js_items_to_products(js_items: list[dict]) -> list[dict]:
     """Convert raw JS-extracted items to product dicts with brand detection."""
     products = []
@@ -386,6 +399,15 @@ def _js_items_to_products(js_items: list[dict]) -> list[dict]:
     seen_names: set[str] = set()
 
     for item in js_items:
+        name = item.get("text", "")[:80].split("\n")[0].strip()
+        name_lower = name.lower()
+
+        # Skip obvious navigation / UI elements
+        if len(name_lower) < 8:
+            continue
+        if any(phrase in name_lower for phrase in _NAV_PHRASES):
+            continue
+
         combined = f"{item.get('text','')} {item.get('alt','')} {item.get('href','')} {item.get('data','')}".lower()
 
         is_medicube = (
@@ -397,8 +419,7 @@ def _js_items_to_products(js_items: list[dict]) -> list[dict]:
             or any(kw in combined for kw in ANUA_PROD_KW)
         )
 
-        # Deduplicate by first 40 chars of text
-        name = item.get("text", "")[:80].split("\n")[0].strip()
+        # Deduplicate
         if name in seen_names:
             continue
         seen_names.add(name)
@@ -513,7 +534,8 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         except Exception:
             pass
 
-    return all_products[:100] if all_products else None
+    # Return all products (not sliced) — brand items may appear anywhere in DOM order
+    return all_products if all_products else None
 
 
 def _fetch_via_requests(log_callback=None) -> list[dict] | None:
