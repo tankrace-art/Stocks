@@ -47,6 +47,21 @@ GOOGLE_TRENDS_TIMEFRAME = "today 3-m"  # Last 3 months
 # API 키 발급: https://serpapi.com/ 에서 무료 가입
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TikTok 수동 데이터 입력 (자동 수집 실패 시 사용)
+#
+# TikTok Creative Center (https://ads.tiktok.com/business/creativecenter/hashtag/medicube/pc/en)
+# 에서 직접 확인한 값을 아래에 입력하세요.
+#
+# 입력 방법:
+#   - 브라우저에서 위 URL을 열고 #medicube 해시태그 통계 확인
+#   - 총 조회수(Total Views)와 게시물 수(Posts)를 숫자로 입력
+#   - 예: TIKTOK_MANUAL_VIEWS = 7_700_000_000  (= 7.7B)
+#   - 값을 0으로 두면 자동 수집 시도
+# ══════════════════════════════════════════════════════════════════════════════
+TIKTOK_MANUAL_VIEWS = int(os.getenv("TIKTOK_MANUAL_VIEWS", "0"))   # 총 해시태그 조회수
+TIKTOK_MANUAL_POSTS = int(os.getenv("TIKTOK_MANUAL_POSTS", "0"))   # 총 게시물 수
+
 # Output settings
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "medicube_reports")
 os.makedirs(OUTPUT_DIR, exist_ok=True)

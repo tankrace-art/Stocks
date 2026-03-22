@@ -7,7 +7,7 @@ import time
 import requests
 from datetime import datetime
 
-from .config import EXOLYT_HASHTAG_URL, HEADERS
+from .config import EXOLYT_HASHTAG_URL, HEADERS, SERPAPI_KEY, TIKTOK_MANUAL_VIEWS, TIKTOK_MANUAL_POSTS
 
 # ── Selenium (Exolyt fallback용) ─────────────────────────────────────────────
 try:
@@ -318,6 +318,76 @@ def _fetch_exolyt_public(hashtag: str, log, headless: bool = False) -> dict:
     return result
 
 
+# ── SerpApi: Google 검색으로 TikTok Creative Center 데이터 수집 ──────────────
+
+def _fetch_serpapi_tiktok(hashtag: str, log) -> dict:
+    """SerpApi를 사용해 Google 검색 결과에서 TikTok 해시태그 조회수 추출."""
+    import re
+    result = {"total_views": None, "total_posts": None, "trending_videos": []}
+
+    if not SERPAPI_KEY:
+        # SerpApi 키 없이도 Google 직접 시도
+        try:
+            query = f"tiktok #{hashtag} hashtag views site:ads.tiktok.com OR site:tiktok.com"
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            url = f"https://www.google.com/search?q={requests.utils.quote(query)}&num=5"
+            log(f"[TikTok] Google 검색 시도: {query[:60]}...")
+            resp = requests.get(url, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                # B/M/K 단위 숫자 추출 (예: "7.7B views", "2.3M posts")
+                patterns = [
+                    r"([\d,]+\.?\d*)\s*[Bb]\s*(?:views?|조회)",
+                    r"([\d,]+\.?\d*)\s*[Mm]\s*(?:views?|조회)",
+                    r"#medicube[^<]*?([\d,.]+[BMKbmk])\s*(?:views?|조회)",
+                ]
+                for pat in patterns:
+                    m = re.search(pat, resp.text)
+                    if m:
+                        num = _parse_number(m.group(1))
+                        if num and num > 1_000_000:
+                            result["total_views"] = num
+                            log(f"[TikTok] Google 검색 조회수: {num:,}")
+                            return result
+                log("[TikTok] Google 검색 결과에서 TikTok 데이터 없음")
+        except Exception as e:
+            log(f"[TikTok] Google 검색 오류: {e}")
+        return result
+
+    # SerpApi 공식 API 사용
+    try:
+        params = {
+            "engine": "google",
+            "q": f"tiktok #{hashtag} hashtag total views",
+            "api_key": SERPAPI_KEY,
+            "num": 5,
+        }
+        log("[TikTok] SerpApi 요청 중...")
+        resp = requests.get("https://serpapi.com/search", params=params, timeout=20)
+        log(f"[TikTok] SerpApi 응답: HTTP {resp.status_code}")
+        if resp.status_code == 200:
+            data = resp.json()
+            # 검색 결과 텍스트에서 숫자 추출
+            for item in data.get("organic_results", []):
+                snippet = item.get("snippet", "") + " " + item.get("title", "")
+                m = re.search(r"([\d,.]+)\s*[Bb]\s*(?:views?|조회)", snippet)
+                if m:
+                    num = _parse_number(m.group(1))
+                    if num:
+                        result["total_views"] = int(float(m.group(1).replace(",", "")) * 1_000_000_000)
+                        log(f"[TikTok] SerpApi 조회수: {result['total_views']:,}")
+                        return result
+    except Exception as e:
+        log(f"[TikTok] SerpApi 오류: {e}")
+
+    return result
+
+
 # ── 공개 진입점 ──────────────────────────────────────────────────────────────
 
 def fetch_tiktok_trends(log_callback=None, headless: bool = False) -> dict:
@@ -343,6 +413,16 @@ def fetch_tiktok_trends(log_callback=None, headless: bool = False) -> dict:
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source": None,
     }
+
+    # ── 0차: 수동 입력값 우선 사용 ────────────────────────────────
+    if TIKTOK_MANUAL_VIEWS or TIKTOK_MANUAL_POSTS:
+        result["total_views"] = TIKTOK_MANUAL_VIEWS or None
+        result["total_posts"] = TIKTOK_MANUAL_POSTS or None
+        result["source"] = "수동 입력"
+        views_disp = f"{result['total_views']:,}" if result["total_views"] else "N/A"
+        posts_disp = f"{result['total_posts']:,}" if result["total_posts"] else "N/A"
+        log(f"[TikTok] ✅ 수동 입력값 사용 - 조회수: {views_disp} / 게시물: {posts_disp}")
+        return result
 
     # ── 1차: TikTok Creative Center API ──────────────────────────
     log("[TikTok] TikTok Creative Center API 시도...")
@@ -379,6 +459,16 @@ def fetch_tiktok_trends(log_callback=None, headless: bool = False) -> dict:
             log(f"[TikTok] ✅ Exolyt 완료 - 조회수: {views_disp} / 게시물: {posts_disp}")
             return result
 
-    log("[TikTok] ⚠️ 모든 소스에서 데이터 수집 실패 (네트워크/차단 확인)")
+    # ── 4차: SerpApi로 Google 검색 결과에서 TikTok 데이터 추출 ──
+    serp = _fetch_serpapi_tiktok(hashtag, log)
+    if serp.get("total_views") or serp.get("total_posts"):
+        result.update(serp)
+        result["source"] = "SerpApi (Google)"
+        views_disp = f"{result['total_views']:,}" if result["total_views"] else "N/A"
+        log(f"[TikTok] ✅ SerpApi 완료 - 조회수: {views_disp}")
+        return result
+
+    log("[TikTok] ⚠ 모든 소스에서 데이터 수집 실패 (네트워크/차단 확인)")
+    log("[TikTok] 💡 config.py의 TIKTOK_MANUAL_VIEWS / TIKTOK_MANUAL_POSTS 에 직접 입력 가능")
     result["error"] = "all sources failed"
     return result
