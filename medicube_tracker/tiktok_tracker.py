@@ -3,17 +3,28 @@ import time
 from datetime import datetime
 
 try:
-    from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.keys import Keys
     from selenium.common.exceptions import TimeoutException, NoSuchElementException
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
+
+# undetected-chromedriver: Cloudflare 봇 감지 우회
+try:
+    import undetected_chromedriver as uc
+    UC_AVAILABLE = True
+except ImportError:
+    UC_AVAILABLE = False
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+except ImportError:
+    pass
 
 try:
     from webdriver_manager.chrome import ChromeDriverManager
@@ -24,10 +35,27 @@ except ImportError:
 from .config import EXOLYT_EMAIL, EXOLYT_PASSWORD, EXOLYT_LOGIN_URL, EXOLYT_HASHTAG_URL
 
 
-def _create_driver(headless: bool = True):
-    """Create a stealth Chrome WebDriver."""
+def _create_driver(headless: bool = False):
+    """Create a stealth Chrome WebDriver (undetected-chromedriver 우선)."""
     if not SELENIUM_AVAILABLE:
         return None
+
+    # ── undetected-chromedriver (Cloudflare 우회) ──────────────────
+    if UC_AVAILABLE:
+        try:
+            options = uc.ChromeOptions()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1366,768")
+            options.add_argument("--lang=en-US")
+            if headless:
+                options.add_argument("--headless=new")
+            driver = uc.Chrome(options=options, use_subprocess=True)
+            return driver
+        except Exception:
+            pass  # fallback to regular selenium
+
+    # ── 일반 selenium fallback ─────────────────────────────────────
     try:
         options = Options()
         if headless:
@@ -42,11 +70,7 @@ def _create_driver(headless: bool = True):
         )
         options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         options.add_experimental_option("useAutomationExtension", False)
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-popup-blocking")
         options.add_argument("--lang=en-US")
-        options.add_argument("--disable-web-security")
-        options.add_argument("--allow-running-insecure-content")
 
         if WDM_AVAILABLE:
             driver = webdriver.Chrome(
@@ -57,8 +81,6 @@ def _create_driver(headless: bool = True):
 
         driver.execute_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            "Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});"
-            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});"
         )
         return driver
     except Exception:

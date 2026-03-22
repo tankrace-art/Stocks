@@ -11,3 +11,4 @@ pytrends>=4.9.0          # Google Trends API
 urllib3<2.0.0            # pytrends 호환성 (method_whitelist 오류 방지)
 selenium>=4.15.0         # TikTok/Exolyt 브라우저 자동화
 webdriver-manager>=4.0.0 # ChromeDriver 자동 설치
+undetected-chromedriver>=3.5.0  # Cloudflare 봇 감지 우회
