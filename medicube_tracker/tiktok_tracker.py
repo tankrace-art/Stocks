@@ -185,17 +185,56 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
     """Log into Exolyt. Returns True if login appears successful."""
     try:
         log(f"[TikTok] Exolyt 로그인 중... ({email})")
-        driver.get(EXOLYT_LOGIN_URL)
-        # Next.js SPA hydration 대기
+
+        # ── Step 1: 홈 페이지 로딩 (SPA hydration) ────────────────
+        driver.get("https://exolyt.com/en")
         try:
             WebDriverWait(driver, 15).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
         except Exception:
             pass
-        time.sleep(2)
+        time.sleep(3)
+        _dismiss_popups(driver, log)
 
-        # 팝업(쿠키 동의 등) 먼저 닫기
+        # ── Step 2: 네비게이션의 Login 버튼 클릭 ─────────────────
+        login_btn_selectors = [
+            "a[href*='login']",
+            "a[href*='sign']",
+            "button[class*='login' i]",
+            "button[class*='sign' i]",
+            "[data-testid*='login']",
+            "nav a", "header a",
+        ]
+        login_clicked = False
+        for sel in login_btn_selectors:
+            try:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                for el in els:
+                    text = (el.text or "").lower()
+                    href = (el.get_attribute("href") or "").lower()
+                    if el.is_displayed() and ("log" in text or "sign" in text or "login" in href):
+                        driver.execute_script("arguments[0].click();", el)
+                        log(f"[TikTok] 로그인 버튼 클릭: '{el.text.strip()}' ({sel})")
+                        login_clicked = True
+                        time.sleep(3)
+                        break
+            except Exception:
+                continue
+            if login_clicked:
+                break
+
+        if not login_clicked:
+            # 직접 로그인 URL로 이동
+            log("[TikTok] 로그인 버튼 미발견 → 직접 URL 이동")
+            driver.get(EXOLYT_LOGIN_URL)
+            try:
+                WebDriverWait(driver, 15).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+            except Exception:
+                pass
+            time.sleep(3)
         _dismiss_popups(driver, log)
 
         # ── 이메일 입력 ───────────────────────────────────
