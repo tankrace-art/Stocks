@@ -64,13 +64,26 @@ _CC_SEARCH_URL = (
 
 
 def _fetch_creative_center(hashtag: str, log) -> dict:
-    """TikTok Creative Center 공개 API로 해시태그 통계 수집."""
+    """TikTok Creative Center 공개 API로 해시태그 통계 수집.
+    Step 1: 메인 페이지 방문 → 세션 쿠키 획득
+    Step 2: API 호출
+    """
     result = {"total_views": None, "total_posts": None, "trending_videos": []}
 
     session = requests.Session()
     session.headers.update(_CC_HEADERS)
 
-    # ── 1) 상세 정보 API ──────────────────────────────────────────
+    # ── Step 1: 메인 페이지 먼저 방문해 쿠키/세션 획득 ────────────
+    try:
+        seed_url = f"https://ads.tiktok.com/business/creativecenter/hashtag/{hashtag}/pc/en"
+        log(f"[TikTok] Creative Center 페이지 방문: {seed_url}")
+        seed_resp = session.get(seed_url, timeout=20)
+        log(f"[TikTok] 시드 페이지 응답: HTTP {seed_resp.status_code}")
+        time.sleep(1)
+    except Exception as e:
+        log(f"[TikTok] 시드 페이지 오류: {e}")
+
+    # ── Step 2: 상세 정보 API ─────────────────────────────────────
     try:
         url = _CC_DETAIL_URL.format(hashtag=hashtag)
         log(f"[TikTok] Creative Center API 요청: {hashtag}")
@@ -78,12 +91,11 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
         log(f"[TikTok] Creative Center 응답: HTTP {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
-            # 응답 구조 로그 (디버그)
             log(f"[TikTok] API 응답 키: {list(data.keys())}")
             info = data.get("data", {}).get("hashtag_detail_info", {})
             if not info:
                 info = data.get("data", {})
-            if isinstance(info, dict):
+            if isinstance(info, dict) and info:
                 log(f"[TikTok] data 키: {list(info.keys())[:8]}")
 
             views = info.get("video_views") or info.get("view_count") or info.get("views")
@@ -98,12 +110,14 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
 
             if result["total_views"] or result["total_posts"]:
                 return result
+            # 데이터가 없으면 응답 일부 출력
+            log(f"[TikTok] API 응답(300자): {resp.text[:300]}")
         else:
             log(f"[TikTok] 응답 내용(200자): {resp.text[:200]}")
     except Exception as e:
         log(f"[TikTok] Creative Center detail 오류: {e}")
 
-    # ── 2) 검색 목록 API (fallback) ───────────────────────────────
+    # ── Step 3: 검색 목록 API ─────────────────────────────────────
     try:
         url = _CC_SEARCH_URL.format(hashtag=hashtag)
         resp = session.get(url, timeout=20)
@@ -120,8 +134,10 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
                         result["total_views"] = int(views)
                     if posts:
                         result["total_posts"] = int(posts)
-                    log(f"[TikTok] 검색 결과 - 조회수: {result['total_views']}, 게시물: {result['total_posts']}")
+                    log(f"[TikTok] 검색 - 조회수: {result['total_views']}, 게시물: {result['total_posts']}")
                     break
+            if not items:
+                log(f"[TikTok] CC search 응답(300자): {resp.text[:300]}")
         else:
             log(f"[TikTok] CC search 응답(200자): {resp.text[:200]}")
     except Exception as e:
@@ -142,6 +158,7 @@ def _fetch_tiktok_tag_page(hashtag: str, log) -> dict:
         ),
         "Accept-Language": "en-US,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Cookie": "tt_chain_token=; s_v_web_id=verify_; ttwid=1;",
     }
     try:
         url = f"https://www.tiktok.com/tag/{hashtag}"
