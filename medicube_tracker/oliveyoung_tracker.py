@@ -5,11 +5,13 @@ import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-from .config import BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS
+from .config import BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS, MEDICUBE_PRODUCT_KW, ANUA_PRODUCT_KW
 
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 ANUA_KW = [kw.lower() for kw in ANUA_KEYWORDS]
+MED_PROD_KW = [kw.lower() for kw in MEDICUBE_PRODUCT_KW]
+ANUA_PROD_KW = [kw.lower() for kw in ANUA_PRODUCT_KW]
 
 _OY_URLS = [
     "https://global.oliveyoung.com/display/page/best-seller",
@@ -83,8 +85,14 @@ def _brand_check(item, url: str = "") -> tuple[str, bool, bool]:
     parts.append(url.lower())
 
     combined = " ".join(parts)
-    is_medicube = any(kw in combined for kw in BRAND_KW)
-    is_anua = any(kw in combined for kw in ANUA_KW)
+    is_medicube = (
+        any(kw in combined for kw in BRAND_KW)
+        or any(kw in combined for kw in MED_PROD_KW)
+    )
+    is_anua = (
+        any(kw in combined for kw in ANUA_KW)
+        or any(kw in combined for kw in ANUA_PROD_KW)
+    )
 
     # Try to get an explicit brand element
     brand_el = item.find(class_=lambda c: c and "brand" in c.lower())

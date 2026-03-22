@@ -10,9 +10,41 @@ EXOLYT_PASSWORD = os.getenv("EXOLYT_PASSWORD", "82017rkf!")
 EXOLYT_HASHTAG_URL = "https://exolyt.com/hashtags/medicube"
 EXOLYT_LOGIN_URL = "https://exolyt.com/en/login"
 
-# Target brand keywords
-BRAND_KEYWORDS = ["medicube", "Medicube", "메디큐브", "메디뷰트"]
-ANUA_KEYWORDS = ["anua", "ANUA", "아누아"]
+# Target brand keywords (Korean, English, Japanese)
+BRAND_KEYWORDS = [
+    "medicube", "Medicube", "MEDICUBE",
+    "메디큐브", "메디뷰트",
+    "メディキューブ",  # Japanese
+]
+ANUA_KEYWORDS = [
+    "anua", "ANUA",
+    "아누아",
+    "アヌア",  # Japanese
+]
+
+# Product-name keywords unique to each brand
+# (used when the brand name itself doesn't appear in the product title)
+MEDICUBE_PRODUCT_KW = [
+    # Brand name variants (Japanese)
+    "メディキューブ",
+    # Signature product lines
+    "age-r", "agr-r",
+    "pdrn",
+    "booster mini", "부스터 미니",
+    "제로모공", "zero pore",   # Medicube Zero Pore line
+    "exosome", "엑소좀",
+    "아젤라인산", "azelaic",
+    "txa", "나시드산",
+    "16bb",
+]
+ANUA_PRODUCT_KW = [
+    # Brand name variants (Japanese)
+    "アヌア",
+    # Signature product lines
+    "heartleaf",              # Anua's hero ingredient
+    "어성초",                  # Korean heartleaf
+    "77%",                    # Anua toner "Heartleaf 77%"
+]
 
 # Brands tracked on Qoo10 & Olive Young
 QOO10_OY_BRANDS = ["medicube", "anua"]

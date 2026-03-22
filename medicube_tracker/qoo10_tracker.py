@@ -6,11 +6,13 @@ from datetime import datetime
 from urllib.parse import unquote
 from bs4 import BeautifulSoup
 
-from .config import QOO10_URLS, BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS
+from .config import QOO10_URLS, BRAND_KEYWORDS, ANUA_KEYWORDS, HEADERS, MEDICUBE_PRODUCT_KW, ANUA_PRODUCT_KW
 
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 ANUA_KW = [kw.lower() for kw in ANUA_KEYWORDS]
+MED_PROD_KW = [kw.lower() for kw in MEDICUBE_PRODUCT_KW]
+ANUA_PROD_KW = [kw.lower() for kw in ANUA_PRODUCT_KW]
 
 _BEAUTY_URLS = [
     "https://www.qoo10.jp/gmkt.inc/BestSellers/?g=2",
@@ -27,13 +29,22 @@ _HEADERS = {
 # --- Brand detection helpers -------------------------------------------------
 
 def _check_brand(text: str, url: str = "") -> tuple[bool, bool]:
-    """Return (is_medicube, is_anua) by checking text + URL-decoded slug."""
+    """
+    Return (is_medicube, is_anua).
+    Checks brand keywords (brand name) AND product-name keywords as fallback.
+    Also decodes the URL slug and checks that too.
+    """
     url_decoded = _slug_from_url(url).lower()
     combined = f"{text.lower()} {url_decoded}"
-    return (
-        any(kw in combined for kw in BRAND_KW),
-        any(kw in combined for kw in ANUA_KW),
+    is_medicube = (
+        any(kw in combined for kw in BRAND_KW)
+        or any(kw in combined for kw in MED_PROD_KW)
     )
+    is_anua = (
+        any(kw in combined for kw in ANUA_KW)
+        or any(kw in combined for kw in ANUA_PROD_KW)
+    )
+    return is_medicube, is_anua
 
 
 def _slug_from_url(url: str) -> str:
