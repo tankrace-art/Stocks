@@ -160,6 +160,20 @@ def _count_brands(product_texts: list[str]) -> dict:
     return counts
 
 
+def _rank_brand_products(product_texts: list[str]) -> dict[str, list[dict]]:
+    """Return per-brand lists of {rank, name} for Medicube and Anua (Top 100)."""
+    result = {"medicube": [], "anua": []}
+    for rank, text in enumerate(product_texts[:100], 1):
+        low = text.lower()
+        # Clean name: take first 80 chars of raw text
+        name = " ".join(text.split())[:80]
+        for brand_key, variants in [("medicube", _variants("medicube")), ("anua", _variants("anua"))]:
+            if any(v in low for v in variants):
+                result[brand_key].append({"rank": rank, "name": name, "brand": brand_key})
+                break
+    return result
+
+
 def _page_url(base: str, page: int) -> str:
     base = base.rstrip("/")
     if page == 1:
@@ -208,7 +222,7 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
     driver = _make_driver(headless=True)
     if driver is None:
         log(f"[Amazon {country_name}] Selenium 드라이버 시작 실패")
-        return {"brand_counts": {b: 0 for b in APR_BRANDS}, "total_items_scanned": 0, "blocked": True}
+        return {"brand_counts": {b: 0 for b in APR_BRANDS}, "medicube_products": [], "anua_products": [], "total_items_scanned": 0, "blocked": True}
 
     all_texts: list[str] = []
     try:
@@ -274,8 +288,12 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
         except Exception:
             pass
 
+    top100 = all_texts[:100]
+    brand_products = _rank_brand_products(top100)
     return {
-        "brand_counts": _count_brands(all_texts[:100]),
+        "brand_counts": _count_brands(top100),
+        "medicube_products": brand_products["medicube"],
+        "anua_products": brand_products["anua"],
         "total_items_scanned": min(len(all_texts), 100),
         "blocked": len(all_texts) == 0,
     }
@@ -332,8 +350,12 @@ def _fetch_via_requests(country_name: str, country_info: dict, log_callback=None
             blocked = True
             break
 
+    top100 = all_texts[:100]
+    brand_products = _rank_brand_products(top100)
     return {
-        "brand_counts": _count_brands(all_texts[:100]),
+        "brand_counts": _count_brands(top100),
+        "medicube_products": brand_products["medicube"],
+        "anua_products": brand_products["anua"],
         "total_items_scanned": min(len(all_texts), 100),
         "blocked": blocked,
     }

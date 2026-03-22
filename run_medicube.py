@@ -349,13 +349,26 @@ class MedicubeTrackerApp:
                     self._update_result_label("oy_anua", "오류")
                 step += 1
 
+            # ── Save rank history ─────────────────────────────────────────
+            history = {}
+            if self._results and self._running:
+                try:
+                    from medicube_tracker.rank_history import load_history, update_history, save_history
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    history = load_history()
+                    update_history(history, today_str, self._results)
+                    save_history(history)
+                    self._log_callback(f"[이력] 순위 이력 저장 완료 ({today_str})")
+                except Exception as e:
+                    self._log_callback(f"[이력] 저장 오류: {e}")
+
             # ── Export ────────────────────────────────────────────────────
             if self._results and self._running:
                 self._update_status("엑셀 리포트 생성 중...", 95)
                 self._log_callback("[엑셀] 일일 리포트 생성 중...")
                 try:
                     from medicube_tracker.excel_exporter import export_daily_report
-                    file_path = export_daily_report(self._results)
+                    file_path = export_daily_report(self._results, history=history)
                     self._last_file = file_path
                     self._log_callback(f"[엑셀] 저장 완료: {file_path}")
                     self.root.after(0, lambda: self._open_file_btn.config(state="normal"))

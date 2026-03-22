@@ -357,7 +357,118 @@ def _create_summary_sheet(wb: openpyxl.Workbook, all_data: dict, report_date: st
     ws.column_dimensions["A"].width = 22
 
 
-def export_daily_report(all_data: dict, output_path: str = None) -> str:
+def _rank_cell_color(rank) -> Optional[str]:
+    """Return fill color based on rank value."""
+    if rank is None:
+        return None
+    if rank <= 10:
+        return "C6EFCE"   # green
+    if rank <= 30:
+        return "FFEB9C"   # yellow
+    if rank <= 50:
+        return "FFCC99"   # orange
+    return "FCE4D6"       # light red (51-100)
+
+
+def _create_rank_history_sheet(
+    wb: openpyxl.Workbook,
+    sheet_name: str,
+    platform_label: str,
+    medicube_hist: dict,
+    anua_hist: dict,
+):
+    """
+    Create a rank history sheet like the user's manual tracking:
+      - Rows = product names
+      - Columns = dates (oldest → newest, right)
+      - Values = rank number (blank = not ranked)
+    Two tables stacked: Medicube on top, Anua below.
+    """
+    ws = wb.create_sheet(sheet_name)
+
+    def write_brand_table(start_row: int, brand_label: str, brand_hist: dict, brand_color: str) -> int:
+        if not brand_hist:
+            ws.cell(row=start_row, column=1).value = f"{platform_label} | {brand_label} - 데이터 없음"
+            ws.cell(row=start_row, column=1).font = Font(italic=True, color="999999", name="맑은 고딕")
+            return start_row + 2
+
+        from .rank_history import get_sorted_dates
+        dates = get_sorted_dates(brand_hist)
+
+        # ── Header row ──────────────────────────────────────────────
+        title_cell = ws.cell(row=start_row, column=1)
+        title_cell.value = f"{platform_label}  |  {brand_label}"
+        title_cell.font = Font(bold=True, size=12, color="FFFFFF", name="맑은 고딕")
+        title_cell.fill = PatternFill("solid", fgColor=brand_color)
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=max(2, len(dates) + 1))
+        ws.row_dimensions[start_row].height = 26
+
+        # ── Column headers (dates) ───────────────────────────────────
+        header_row = start_row + 1
+        _style_header_cell(ws.cell(row=header_row, column=1), "상품명", "4472C4")
+        ws.column_dimensions["A"].width = max(ws.column_dimensions["A"].width or 0, 35)
+        for col_idx, d in enumerate(dates, 2):
+            # Format: YY.MM.DD
+            try:
+                from datetime import date as _date
+                parts = d.split("-")
+                label = f"{parts[0][2:]}.{parts[1]}.{parts[2]}"
+            except Exception:
+                label = d
+            cell = ws.cell(row=header_row, column=col_idx)
+            _style_header_cell(cell, label, "4472C4")
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = 10
+
+        # ── Product rows ─────────────────────────────────────────────
+        # Sort products by most recent rank (ascending, None = last)
+        def sort_key(item):
+            _name, date_map = item
+            last = dates[-1] if dates else None
+            v = date_map.get(last) if last else None
+            return (v is None, v or 9999)
+
+        sorted_products = sorted(brand_hist.items(), key=sort_key)
+
+        for row_offset, (prod_name, date_map) in enumerate(sorted_products):
+            r = header_row + 1 + row_offset
+            bg = COLOR_ROW_ALT if row_offset % 2 == 0 else None
+            # Product name cell
+            name_cell = ws.cell(row=r, column=1)
+            name_cell.value = prod_name
+            name_cell.font = Font(size=10, name="맑은 고딕")
+            if bg:
+                name_cell.fill = PatternFill("solid", fgColor=bg)
+            name_cell.alignment = Alignment(horizontal="left", vertical="center")
+            name_cell.border = _thin_border()
+
+            for col_idx, d in enumerate(dates, 2):
+                rank_val = date_map.get(d)
+                rank_bg = _rank_cell_color(rank_val)
+                cell = ws.cell(row=r, column=col_idx)
+                cell.value = rank_val if rank_val is not None else ""
+                cell.font = Font(size=10, bold=(rank_val is not None and rank_val <= 10), name="맑은 고딕")
+                if rank_bg:
+                    cell.fill = PatternFill("solid", fgColor=rank_bg)
+                elif bg:
+                    cell.fill = PatternFill("solid", fgColor=bg)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = _thin_border()
+
+        next_row = header_row + 1 + len(sorted_products) + 2  # 2-row gap
+        return next_row
+
+    # Medicube table (blue header)
+    next_row = write_brand_table(1, "Medicube", medicube_hist, COLOR_HEADER_BG)
+    # Anua table (green header)
+    write_brand_table(next_row, "Anua", anua_hist, "2E7D32")
+
+    # Freeze first column and header rows
+    ws.freeze_panes = "B3"
+
+
+def export_daily_report(all_data: dict, output_path: str = None, history: dict = None) -> str:
     """
     Export all collected trend data to a formatted Excel file.
     Returns the path to the saved file.
@@ -388,6 +499,31 @@ def export_daily_report(all_data: dict, output_path: str = None) -> str:
 
     if "oliveyoung" in all_data and not all_data["oliveyoung"].get("error"):
         _create_platform_sheet(wb, all_data["oliveyoung"], "Olive Young")
+
+    # ── Rank history sheets (누적 순위 이력) ─────────────────────────
+    if history:
+        # Qoo10
+        q_hist = history.get("qoo10", {})
+        if q_hist:
+            _create_rank_history_sheet(
+                wb, "큐텐 순위이력", "Qoo10 Japan",
+                q_hist.get("medicube", {}), q_hist.get("anua", {}),
+            )
+        # Olive Young
+        oy_hist = history.get("oliveyoung", {})
+        if oy_hist:
+            _create_rank_history_sheet(
+                wb, "올리브영 순위이력", "Olive Young",
+                oy_hist.get("medicube", {}), oy_hist.get("anua", {}),
+            )
+        # Amazon - 각 국가별
+        amazon_hist_keys = [k for k in history if k.startswith("amazon_")]
+        for ak in amazon_hist_keys:
+            country = ak.replace("amazon_", "")
+            _create_rank_history_sheet(
+                wb, f"아마존({country}) 순위이력", f"Amazon {country}",
+                history[ak].get("medicube", {}), history[ak].get("anua", {}),
+            )
 
     wb.save(output_path)
     return output_path
