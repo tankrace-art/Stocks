@@ -246,6 +246,109 @@ def _click_more_button(driver, log) -> bool:
     return False
 
 
+def _js_extract_products(driver, log) -> list[dict]:
+    """
+    Execute JavaScript inside the browser to extract product data directly
+    from the rendered DOM - bypasses CSS selector issues.
+    Returns list of {rank, brand, name, url} or empty list.
+    """
+    js = """
+    var results = [];
+    var rank = 0;
+
+    // Strategy 1: look for elements with both a link and meaningful text
+    var candidates = document.querySelectorAll(
+        'li, article, [class*="item"], [class*="product"], [class*="prd"], [class*="goods"], [class*="card"]'
+    );
+    var seen = new Set();
+    candidates.forEach(function(el) {
+        var links = el.querySelectorAll('a[href]');
+        if (links.length === 0) return;
+        var text = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+        if (text.length < 5 || text.length > 500) return;
+        if (seen.has(text.substr(0, 30))) return;
+        seen.add(text.substr(0, 30));
+
+        var href = '';
+        links.forEach(function(a) { if (!href) href = a.href; });
+
+        var imgs = el.querySelectorAll('img');
+        var alt = '';
+        imgs.forEach(function(img) { if (!alt) alt = img.alt || ''; });
+
+        // data-* attributes
+        var dataStr = '';
+        Array.from(el.attributes).forEach(function(attr) {
+            if (attr.name.indexOf('data-') === 0) dataStr += ' ' + attr.value;
+        });
+
+        rank++;
+        results.push({rank: rank, text: text.substr(0, 150), alt: alt.substr(0, 80),
+                      href: href.substr(0, 150), data: dataStr.substr(0, 100)});
+        if (rank >= 150) return;
+    });
+
+    return JSON.stringify(results);
+    """
+    try:
+        raw = driver.execute_script(js)
+        import json as _json
+        items = _json.loads(raw) if raw else []
+        log(f"[OliveYoung] JS 추출: {len(items)}개 후보 요소")
+        if items:
+            log(f"[OliveYoung] JS 샘플[0]: text={items[0].get('text','')[:60]!r}")
+            sample1 = items[1].get("text", "")[:60] if len(items) > 1 else "N/A"
+        log(f"[OliveYoung] JS 샘플[1]: text={sample1!r}")
+        return items
+    except Exception as e:
+        log(f"[OliveYoung] JS 추출 오류: {e}")
+        return []
+
+
+def _js_items_to_products(js_items: list[dict]) -> list[dict]:
+    """Convert raw JS-extracted items to product dicts with brand detection."""
+    products = []
+    real_rank = 0
+    seen_names: set[str] = set()
+
+    for item in js_items:
+        combined = f"{item.get('text','')} {item.get('alt','')} {item.get('href','')} {item.get('data','')}".lower()
+
+        is_medicube = (
+            any(kw in combined for kw in BRAND_KW)
+            or any(kw in combined for kw in MED_PROD_KW)
+        )
+        is_anua = (
+            any(kw in combined for kw in ANUA_KW)
+            or any(kw in combined for kw in ANUA_PROD_KW)
+        )
+
+        # Deduplicate by first 40 chars of text
+        name = item.get("text", "")[:80].split("\n")[0].strip()
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
+        brand = ""
+        if is_medicube:
+            brand = "Medicube"
+        elif is_anua:
+            brand = "ANUA"
+
+        real_rank += 1
+        products.append({
+            "rank": real_rank,
+            "brand": brand,
+            "name": name,
+            "price": "",
+            "url": item.get("href", ""),
+            "is_medicube": is_medicube,
+            "is_anua": is_anua,
+        })
+
+    return products
+
+
 def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
     def log(m):
         if log_callback: log_callback(m)
@@ -261,23 +364,43 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         for url in _OY_URLS[:2]:
             log(f"[OliveYoung] 로딩: {url}")
             driver.get(url)
-            time.sleep(8)  # React 렌더링 대기
+            time.sleep(10)  # React 렌더링 대기
 
-            # 최대 5회 더보기 클릭 + 스크롤 반복으로 100개 확보
             for attempt in range(5):
                 _scroll_load_all(driver, max_scrolls=15)
 
+                # ── Method 1: BeautifulSoup CSS selector ─────────────────
                 soup = BeautifulSoup(driver.page_source, "lxml")
                 products = _parse_products_from_soup(soup, log_callback)
 
+                # ── Method 2: JS direct DOM extraction (if BS4 found < 5 brands) ─
+                brand_found = sum(1 for p in products if p.get("is_medicube") or p.get("is_anua"))
+                if products and brand_found == 0:
+                    log("[OliveYoung] BS4로 브랜드 미감지 → JS 방식 시도...")
+                    js_items = _js_extract_products(driver, log)
+                    if js_items:
+                        js_products = _js_items_to_products(js_items)
+                        # Merge: prefer JS results if more brands found
+                        js_brands = sum(1 for p in js_products if p.get("is_medicube") or p.get("is_anua"))
+                        if js_brands > 0:
+                            log(f"[OliveYoung] JS 방식으로 브랜드 {js_brands}개 감지!")
+                            products = js_products
+
+                if not products:
+                    log("[OliveYoung] JS 방식도 실패 → JS 재시도...")
+                    js_items = _js_extract_products(driver, log)
+                    if js_items:
+                        products = _js_items_to_products(js_items)
+
                 if products:
                     all_products = products
-                    log(f"[OliveYoung] {len(products)}개 로드됨 (시도 {attempt+1})")
+                    med_cnt = sum(1 for p in products if p.get("is_medicube"))
+                    anua_cnt = sum(1 for p in products if p.get("is_anua"))
+                    log(f"[OliveYoung] {len(products)}개 (시도 {attempt+1}) | Medicube={med_cnt} Anua={anua_cnt}")
 
                     if len(products) >= 95:
                         break
 
-                    # 더보기 버튼 클릭
                     clicked = _click_more_button(driver, log)
                     if not clicked:
                         break
@@ -289,15 +412,13 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
                 break
 
         if not all_products:
-            log("[OliveYoung] 구조 파싱 실패 → 텍스트 검색 시도...")
+            log("[OliveYoung] 구조 파싱 실패 → 페이지 텍스트 스캔...")
             try:
                 body_text = driver.find_element("tag name", "body").text.lower()
-                hits_med = sum(body_text.count(kw) for kw in BRAND_KW)
-                hits_anua = sum(body_text.count(kw) for kw in ANUA_KW)
-                if hits_med > 0:
-                    log(f"[OliveYoung] 페이지에서 'medicube' {hits_med}회 발견 (구조 파싱 불가)")
-                if hits_anua > 0:
-                    log(f"[OliveYoung] 페이지에서 'anua' {hits_anua}회 발견 (구조 파싱 불가)")
+                for brand, kws in [("medicube", BRAND_KW + MED_PROD_KW), ("anua", ANUA_KW + ANUA_PROD_KW)]:
+                    hits = sum(body_text.count(kw) for kw in kws)
+                    if hits:
+                        log(f"[OliveYoung] 페이지 텍스트에 '{brand}' {hits}회 → 구조 파싱 실패")
             except Exception:
                 pass
 

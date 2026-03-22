@@ -468,6 +468,138 @@ def _create_rank_history_sheet(
     ws.freeze_panes = "B3"
 
 
+def _create_amazon_rank_history_sheet(
+    wb: openpyxl.Workbook,
+    history: dict,
+    amazon_keys: list[str],
+):
+    """
+    Single unified Amazon rank history sheet.
+    Layout (per brand):
+      [Brand header spanning all columns]
+      [Country sub-header] | date1 | date2 | ...
+        product A          |  rank |  rank | ...
+        product B          |  rank |  rank | ...
+      [gap]
+      [Next country sub-header] ...
+    """
+    from .rank_history import get_sorted_dates
+
+    ws = wb.create_sheet("아마존 순위이력")
+    ws.column_dimensions["A"].width = 40
+
+    # Collect all dates across all countries for alignment
+    all_dates: set[str] = set()
+    for ak in amazon_keys:
+        for brand_hist in history[ak].values():
+            all_dates.update(get_sorted_dates(brand_hist))
+    dates = sorted(all_dates)
+
+    # Pre-format date labels  YY.MM.DD
+    def fmt_date(d):
+        try:
+            p = d.split("-")
+            return f"{p[0][2:]}.{p[1]}.{p[2]}"
+        except Exception:
+            return d
+
+    date_labels = [fmt_date(d) for d in dates]
+
+    def write_country_block(start_row: int, country_label: str, brand_hist: dict) -> int:
+        """Write one country block inside a brand section. Returns next free row."""
+        if not brand_hist:
+            return start_row
+
+        # Sort products by latest rank
+        last = dates[-1] if dates else None
+        sorted_prods = sorted(
+            brand_hist.items(),
+            key=lambda x: (x[1].get(last) is None, x[1].get(last) or 9999),
+        )
+        if not sorted_prods:
+            return start_row
+
+        # Country label row
+        cl = ws.cell(row=start_row, column=1)
+        cl.value = f"  {country_label}"
+        cl.font = Font(bold=True, size=10, color="FFFFFF", name="맑은 고딕")
+        cl.fill = PatternFill("solid", fgColor=COLOR_SUBHEADER_BG)
+        cl.alignment = Alignment(horizontal="left", vertical="center")
+        cl.border = _thin_border()
+        for col_idx, label in enumerate(date_labels, 2):
+            c = ws.cell(row=start_row, column=col_idx)
+            c.value = label
+            c.font = Font(bold=True, size=9, color="FFFFFF", name="맑은 고딕")
+            c.fill = PatternFill("solid", fgColor=COLOR_SUBHEADER_BG)
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.border = _thin_border()
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = max(
+                ws.column_dimensions[col_letter].width or 0, 9
+            )
+
+        # Product rows
+        for i, (prod_name, date_map) in enumerate(sorted_prods):
+            r = start_row + 1 + i
+            bg = COLOR_ROW_ALT if i % 2 == 0 else None
+            nc = ws.cell(row=r, column=1)
+            nc.value = f"    {prod_name}"
+            nc.font = Font(size=9, name="맑은 고딕")
+            if bg:
+                nc.fill = PatternFill("solid", fgColor=bg)
+            nc.alignment = Alignment(horizontal="left", vertical="center")
+            nc.border = _thin_border()
+
+            for col_idx, d in enumerate(dates, 2):
+                rv = date_map.get(d)
+                rc = ws.cell(row=r, column=col_idx)
+                rc.value = rv if rv is not None else ""
+                rank_bg = _rank_cell_color(rv)
+                rc.font = Font(size=9, bold=(rv is not None and rv <= 10), name="맑은 고딕")
+                if rank_bg:
+                    rc.fill = PatternFill("solid", fgColor=rank_bg)
+                elif bg:
+                    rc.fill = PatternFill("solid", fgColor=bg)
+                rc.alignment = Alignment(horizontal="center", vertical="center")
+                rc.border = _thin_border()
+
+        return start_row + 1 + len(sorted_prods) + 1  # +1 gap
+
+    current_row = 1
+    for brand_key, brand_label, brand_color in [
+        ("medicube", "Medicube", COLOR_HEADER_BG),
+        ("anua", "Anua", "2E7D32"),
+    ]:
+        # Check if any country has data for this brand
+        has_data = any(history[ak].get(brand_key) for ak in amazon_keys)
+        if not has_data:
+            continue
+
+        # Big brand title
+        title = ws.cell(row=current_row, column=1)
+        title.value = f"Amazon 베스트셀러 순위이력  |  {brand_label}"
+        title.font = Font(bold=True, size=13, color="FFFFFF", name="맑은 고딕")
+        title.fill = PatternFill("solid", fgColor=brand_color)
+        title.alignment = Alignment(horizontal="center", vertical="center")
+        total_cols = max(2, len(dates) + 1)
+        ws.merge_cells(
+            start_row=current_row, start_column=1,
+            end_row=current_row, end_column=total_cols,
+        )
+        ws.row_dimensions[current_row].height = 28
+        current_row += 1
+
+        # Each country block
+        for ak in amazon_keys:
+            country = ak.replace("amazon_", "")
+            brand_hist = history[ak].get(brand_key, {})
+            current_row = write_country_block(current_row, country, brand_hist)
+
+        current_row += 2  # gap between brand sections
+
+    ws.freeze_panes = "B2"
+
+
 def export_daily_report(all_data: dict, output_path: str = None, history: dict = None) -> str:
     """
     Export all collected trend data to a formatted Excel file.
@@ -516,14 +648,10 @@ def export_daily_report(all_data: dict, output_path: str = None, history: dict =
                 wb, "올리브영 순위이력", "Olive Young",
                 oy_hist.get("medicube", {}), oy_hist.get("anua", {}),
             )
-        # Amazon - 각 국가별
-        amazon_hist_keys = [k for k in history if k.startswith("amazon_")]
-        for ak in amazon_hist_keys:
-            country = ak.replace("amazon_", "")
-            _create_rank_history_sheet(
-                wb, f"아마존({country}) 순위이력", f"Amazon {country}",
-                history[ak].get("medicube", {}), history[ak].get("anua", {}),
-            )
+        # Amazon - 국가 통합 1개 시트
+        amazon_hist_keys = sorted([k for k in history if k.startswith("amazon_")])
+        if amazon_hist_keys:
+            _create_amazon_rank_history_sheet(wb, history, amazon_hist_keys)
 
     wb.save(output_path)
     return output_path
