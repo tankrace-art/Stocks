@@ -120,15 +120,28 @@ def _fill_by_js(driver, selector: str, value: str) -> bool:
         return False
 
 
+def _wait_for_visible_input(driver, timeout: int = 20):
+    """화면에 보이는 텍스트/이메일 input이 나타날 때까지 폴링으로 대기."""
+    skip_types = {"hidden", "submit", "button", "checkbox", "radio", "file", "image", "reset"}
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            inputs = driver.find_elements(By.TAG_NAME, "input")
+            visible = [
+                i for i in inputs
+                if i.is_displayed() and i.get_attribute("type") not in skip_types
+            ]
+            if visible:
+                return visible
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return []
+
+
 def _find_input(driver, selectors: list, wait_sec: int = 20):
-    """페이지가 로딩될 때까지 한 번만 기다린 뒤, 셀렉터를 순서대로 즉시 확인."""
-    # 먼저 어떤 input이든 나타날 때까지 최대 wait_sec 초 대기
-    try:
-        WebDriverWait(driver, wait_sec).until(
-            EC.presence_of_element_located((By.TAG_NAME, "input"))
-        )
-    except TimeoutException:
-        pass
+    """보이는 input이 렌더링될 때까지 기다린 뒤 셀렉터를 즉시 확인."""
+    _wait_for_visible_input(driver, timeout=wait_sec)
 
     for sel in selectors:
         try:
@@ -146,6 +159,13 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
     try:
         log(f"[TikTok] Exolyt 로그인 중... ({email})")
         driver.get(EXOLYT_LOGIN_URL)
+        # Next.js SPA hydration 대기
+        try:
+            WebDriverWait(driver, 15).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+        except Exception:
+            pass
         time.sleep(2)
 
         # 팝업(쿠키 동의 등) 먼저 닫기
