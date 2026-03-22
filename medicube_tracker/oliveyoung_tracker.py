@@ -20,6 +20,8 @@ _OY_URLS = [
 _OY_API_URLS = [
     "https://global.oliveyoung.com/api/display/best-seller",
     "https://global.oliveyoung.com/api/product/list?cate_no=01&sort=ranking",
+    "https://global.oliveyoung.com/api/v1/product/best-seller?page=1&size=100",
+    "https://global.oliveyoung.com/api/product/bestList?pageIndex=1&pageUnit=100",
 ]
 
 
@@ -143,6 +145,52 @@ def _parse_products_from_soup(soup: BeautifulSoup, log_callback=None) -> list[di
     return products
 
 
+def _scroll_load_all(driver, max_scrolls: int = 15) -> None:
+    """Scroll page multiple times to trigger lazy-loading of all items."""
+    last_count = 0
+    for i in range(max_scrolls):
+        # 점진적 스크롤
+        driver.execute_script(
+            f"window.scrollTo(0, document.body.scrollHeight * {(i + 1) / max_scrolls});"
+        )
+        time.sleep(0.8)
+
+        # 새 항목이 더 이상 안 나타나면 멈춤
+        current_height = driver.execute_script("return document.body.scrollHeight")
+        if i > 5 and current_height == last_count:
+            break
+        last_count = current_height
+
+    # 마지막으로 맨 아래까지
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(2)
+
+
+def _click_more_button(driver, log) -> bool:
+    """'더보기' 또는 'Load More' 버튼 클릭. 클릭 성공시 True."""
+    try:
+        from selenium.webdriver.common.by import By
+        selectors = [
+            "button[class*='more']", "button[class*='More']",
+            "a[class*='more']", ".btn_more", ".load-more",
+            "button[class*='load']", "[class*='view-more']",
+            "button:contains('더보기')", "button:contains('More')",
+        ]
+        for sel in selectors:
+            try:
+                btn = driver.find_element(By.CSS_SELECTOR, sel)
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    time.sleep(3)
+                    log(f"[OliveYoung] '더보기' 버튼 클릭 ({sel})")
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
+
+
 def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
     def log(m):
         if log_callback: log_callback(m)
@@ -153,32 +201,39 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         log("[OliveYoung] Selenium 드라이버 시작 실패")
         return None
 
-    products = []
+    all_products = []
     try:
-        for url in _OY_URLS:
+        for url in _OY_URLS[:2]:
             log(f"[OliveYoung] 로딩: {url}")
             driver.get(url)
+            time.sleep(8)  # React 렌더링 대기
 
-            # Wait for React to render (longer wait)
-            time.sleep(8)
+            # 최대 5회 더보기 클릭 + 스크롤 반복으로 100개 확보
+            for attempt in range(5):
+                _scroll_load_all(driver, max_scrolls=15)
 
-            # Multiple scroll passes to trigger lazy-loading
-            for _ in range(3):
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
-                time.sleep(1.5)
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(1.5)
-                driver.execute_script("window.scrollTo(0, 0);")
-                time.sleep(1)
+                soup = BeautifulSoup(driver.page_source, "lxml")
+                products = _parse_products_from_soup(soup, log_callback)
 
-            soup = BeautifulSoup(driver.page_source, "lxml")
-            products = _parse_products_from_soup(soup, log_callback)
+                if products:
+                    all_products = products
+                    log(f"[OliveYoung] {len(products)}개 로드됨 (시도 {attempt+1})")
 
-            if products:
-                log(f"[OliveYoung] 성공: {len(products)}개")
+                    if len(products) >= 95:
+                        break
+
+                    # 더보기 버튼 클릭
+                    clicked = _click_more_button(driver, log)
+                    if not clicked:
+                        break
+                else:
+                    break
+
+            if all_products:
+                log(f"[OliveYoung] 최종 {len(all_products)}개 수집")
                 break
 
-        if not products:
+        if not all_products:
             log("[OliveYoung] 구조 파싱 실패 → 텍스트 검색 시도...")
             try:
                 body_text = driver.find_element("tag name", "body").text.lower()
@@ -196,7 +251,7 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         except Exception:
             pass
 
-    return products if products else None
+    return all_products[:100] if all_products else None
 
 
 def _fetch_via_requests(log_callback=None) -> list[dict] | None:

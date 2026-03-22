@@ -176,17 +176,25 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
 
         for page in [1, 2]:
             url = _page_url(country_info["url"], page)
-            log(f"[Amazon {country_name}] 페이지{page} 로딩 중...")
+            log(f"[Amazon {country_name}] 페이지{page} 로딩 중... (1~50위 / 51~100위)")
             driver.get(url)
             time.sleep(random.uniform(4, 6))
 
-            # Human-like scroll
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.3);")
-            time.sleep(1.5)
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.7);")
-            time.sleep(1.5)
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # ── 천천히 스크롤하여 lazy-load 아이템 전부 로드 ──────────────
+            # 아마존은 스크롤 시 아이템이 lazy-load됨 (페이지당 50개)
+            # 10단계로 나눠 스크롤해야 모든 항목이 DOM에 추가됨
+            for step in range(1, 11):
+                driver.execute_script(
+                    f"window.scrollTo(0, document.body.scrollHeight * {step / 10});"
+                )
+                time.sleep(0.8)
             time.sleep(2)
+
+            # 맨 위로 돌아와서 최종 렌더링 확인
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.5)
 
             html = driver.page_source
             if _is_blocked(html):
@@ -195,7 +203,7 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
 
             texts = _extract_products_from_html(html)
             all_texts.extend(texts)
-            log(f"[Amazon {country_name}] 페이지{page}: {len(texts)}개 항목")
+            log(f"[Amazon {country_name}] 페이지{page}: {len(texts)}개 항목 수집 (누적: {len(all_texts)}개)")
 
             if page < 2:
                 time.sleep(random.uniform(3, 5))

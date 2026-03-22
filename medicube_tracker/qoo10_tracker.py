@@ -10,12 +10,15 @@ from .config import QOO10_URLS, BRAND_KEYWORDS, HEADERS
 
 BRAND_KW = [kw.lower() for kw in BRAND_KEYWORDS]
 
+# 베스트셀러 URL: &page=N 또는 &pageNum=N 로 페이지네이션
 _BEAUTY_URLS = [
     "https://www.qoo10.jp/gmkt.inc/BestSellers/?g=2",
     "https://www.qoo10.jp/gmkt.inc/BestSellers/?g=28000",
     "https://www.qoo10.jp/gmkt.inc/BestSellers/",
     "https://www.qoo10.jp/sr/SearchResult.aspx?keyword=medicube&sort=W",
 ]
+# 각 베스트셀러 URL에 추가할 페이지 파라미터 패턴들
+_PAGE_PARAMS = ["&page={}", "&pageNum={}", "&p={}", "?page={}", "?p={}"]
 
 _HEADERS = {
     **HEADERS,
@@ -143,6 +146,24 @@ def _parse_products(html: str, log_callback=None) -> list[dict]:
     return products
 
 
+def _scroll_and_parse(driver, url: str, log_callback=None) -> list[dict]:
+    """Load URL, scroll fully, parse products."""
+    def log(m):
+        if log_callback: log_callback(m)
+        else: print(m)
+
+    driver.get(url)
+    time.sleep(random.uniform(4, 6))
+
+    # Incremental scroll to trigger lazy-loading
+    for step in range(1, 8):
+        driver.execute_script(f"window.scrollTo(0, document.body.scrollHeight * {step / 7});")
+        time.sleep(0.7)
+    time.sleep(2)
+
+    return _parse_products(driver.page_source, log_callback)
+
+
 def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
     def log(m):
         if log_callback: log_callback(m)
@@ -153,34 +174,52 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         log("[Qoo10] Selenium 드라이버 시작 실패")
         return None
 
+    all_products: list[dict] = []
     try:
-        for url in _BEAUTY_URLS[:3]:  # skip search URL for bestseller
-            log(f"[Qoo10] Selenium 로딩: {url}")
-            driver.get(url)
-            time.sleep(random.uniform(4, 6))
+        base_url = _BEAUTY_URLS[0]  # 뷰티 베스트셀러 우선
+        # 페이지 1~3 시도 (페이지당 최대 40~50개 → 총 100개 확보)
+        for page_num in range(1, 4):
+            if page_num == 1:
+                url = base_url
+            else:
+                url = f"{base_url}&page={page_num}"
 
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.5);")
-            time.sleep(1.5)
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
+            log(f"[Qoo10] 페이지 {page_num} 로딩: {url}")
+            products = _scroll_and_parse(driver, url, log_callback)
 
-            products = _parse_products(driver.page_source, log_callback)
+            if not products and page_num == 1:
+                # 페이지1 실패시 다른 URL 시도
+                for alt_url in _BEAUTY_URLS[1:3]:
+                    log(f"[Qoo10] 대체 URL 시도: {alt_url}")
+                    products = _scroll_and_parse(driver, alt_url, log_callback)
+                    if products:
+                        break
+
             if products:
-                log(f"[Qoo10] Selenium 성공: {len(products)}개")
-                return products
+                # rank 번호 재조정 (누적)
+                offset = len(all_products)
+                for p in products:
+                    p["rank"] = offset + p["rank"]
+                all_products.extend(products)
+                log(f"[Qoo10] 페이지 {page_num}: {len(products)}개 (누적: {len(all_products)}개)")
+            else:
+                log(f"[Qoo10] 페이지 {page_num} 항목 없음 - 중단")
+                break
 
-        # If bestseller failed, try search for medicube
+            if len(all_products) >= 100:
+                break
+            time.sleep(random.uniform(2, 3))
+
+        if all_products:
+            return all_products[:100]
+
+        # 최후 수단: 메디큐브 직접 검색
         log("[Qoo10] 베스트셀러 파싱 실패 → 메디큐브 직접 검색 시도...")
         search_url = "https://www.qoo10.jp/sr/SearchResult.aspx?keyword=medicube&sort=W"
-        driver.get(search_url)
-        time.sleep(random.uniform(4, 5))
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-
-        products = _parse_products(driver.page_source, log_callback)
+        products = _scroll_and_parse(driver, search_url, log_callback)
         if products:
             log(f"[Qoo10] 검색 결과: {len(products)}개")
-            return products
+            return products[:100]
 
     except Exception as e:
         log(f"[Qoo10] Selenium 오류: {e}")
@@ -190,7 +229,7 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
         except Exception:
             pass
 
-    return None
+    return all_products if all_products else None
 
 
 def _fetch_via_requests(log_callback=None) -> list[dict] | None:
@@ -201,25 +240,43 @@ def _fetch_via_requests(log_callback=None) -> list[dict] | None:
     session = requests.Session()
     session.headers.update(_HEADERS)
 
-    for url in _BEAUTY_URLS:
-        log(f"[Qoo10] requests 시도: {url}")
-        try:
-            resp = session.get(url, timeout=20)
-            if resp.status_code != 200:
-                log(f"[Qoo10] HTTP {resp.status_code}")
-                continue
+    all_products: list[dict] = []
 
-            products = _parse_products(resp.text, log_callback)
-            if products:
-                return products
+    for base_url in _BEAUTY_URLS[:3]:
+        # 페이지 1~3 시도
+        for page_num in range(1, 4):
+            url = base_url if page_num == 1 else f"{base_url}&page={page_num}"
+            log(f"[Qoo10] requests 페이지{page_num}: {url}")
+            try:
+                resp = session.get(url, timeout=20)
+                if resp.status_code != 200:
+                    log(f"[Qoo10] HTTP {resp.status_code}")
+                    break
 
-            raw_lower = resp.text.lower()
-            hits = sum(raw_lower.count(kw) for kw in BRAND_KW)
-            if hits > 0:
-                log(f"[Qoo10] 텍스트에서 medicube {hits}회 검출 (구조 파싱 실패)")
+                products = _parse_products(resp.text, log_callback)
+                if products:
+                    offset = len(all_products)
+                    for p in products:
+                        p["rank"] = offset + p["rank"]
+                    all_products.extend(products)
+                    log(f"[Qoo10] 페이지{page_num}: {len(products)}개 (누적: {len(all_products)}개)")
+                else:
+                    raw_lower = resp.text.lower()
+                    hits = sum(raw_lower.count(kw) for kw in BRAND_KW)
+                    if hits > 0:
+                        log(f"[Qoo10] 텍스트에서 medicube {hits}회 발견 (구조 파싱 불가)")
+                    break
 
-        except requests.RequestException as e:
-            log(f"[Qoo10] 네트워크 오류: {e}")
+                if len(all_products) >= 100:
+                    break
+                time.sleep(random.uniform(1, 2))
+
+            except requests.RequestException as e:
+                log(f"[Qoo10] 네트워크 오류: {e}")
+                break
+
+        if all_products:
+            return all_products[:100]
 
     return None
 
