@@ -246,6 +246,80 @@ def _click_more_button(driver, log) -> bool:
     return False
 
 
+def _extract_nextjs_data(driver, log) -> list[dict]:
+    """
+    Pull product list from Next.js __NEXT_DATA__ embedded JSON.
+    Returns list of {rank, brand, name, url} or [].
+    """
+    try:
+        raw = driver.execute_script("return JSON.stringify(window.__NEXT_DATA__ || null)")
+        if not raw or raw == "null":
+            return []
+        import json as _json
+        nd = _json.loads(raw)
+        log(f"[OliveYoung] __NEXT_DATA__ 발견! 최상위 키: {list(nd.keys())[:6]}")
+
+        # Walk all nested structures to find arrays that look like product lists
+        def find_product_arrays(obj, depth=0):
+            """Recursively find arrays of objects that look like products."""
+            if depth > 8:
+                return []
+            results = []
+            if isinstance(obj, list) and len(obj) > 2:
+                first = obj[0] if obj else {}
+                if isinstance(first, dict):
+                    # Check if it looks like a product list
+                    keys = set(first.keys())
+                    product_signals = {"goodsName", "goods_name", "name", "brandName", "brand",
+                                       "goodsNo", "itemNo", "productId", "salePrice", "price"}
+                    if keys & product_signals:
+                        results.append(obj)
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    results.extend(find_product_arrays(v, depth + 1))
+            return results
+
+        product_arrays = find_product_arrays(nd)
+        if not product_arrays:
+            log("[OliveYoung] __NEXT_DATA__에서 상품 배열 미발견")
+            return []
+
+        # Use the largest array found
+        best = max(product_arrays, key=len)
+        log(f"[OliveYoung] __NEXT_DATA__ 상품 배열: {len(best)}개")
+
+        products = []
+        for rank, item in enumerate(best[:100], 1):
+            name = item.get("goodsName", item.get("name", item.get("goods_name", item.get("productName", ""))))
+            brand = item.get("brandName", item.get("brand", item.get("brandEnName", "")))
+            price = str(item.get("salePrice", item.get("price", item.get("goods_price", ""))))
+            url = item.get("goodsDetailUrl", item.get("url", item.get("goodsUrl", "")))
+            if not url.startswith("http") and url:
+                url = "https://global.oliveyoung.com" + url
+
+            combined = f"{brand} {name}".lower()
+            is_medicube = (
+                any(kw in combined for kw in BRAND_KW) or any(kw in combined for kw in MED_PROD_KW)
+            )
+            is_anua = (
+                any(kw in combined for kw in ANUA_KW) or any(kw in combined for kw in ANUA_PROD_KW)
+            )
+            if not brand:
+                brand = "Medicube" if is_medicube else ("ANUA" if is_anua else "")
+
+            products.append({
+                "rank": rank, "brand": brand, "name": name,
+                "price": price, "url": url,
+                "is_medicube": is_medicube, "is_anua": is_anua,
+            })
+
+        return products
+
+    except Exception as e:
+        log(f"[OliveYoung] __NEXT_DATA__ 파싱 오류: {e}")
+        return []
+
+
 def _js_extract_products(driver, log) -> list[dict]:
     """
     Execute JavaScript inside the browser to extract product data directly
@@ -368,6 +442,15 @@ def _fetch_via_selenium(log_callback=None) -> list[dict] | None:
 
             for attempt in range(5):
                 _scroll_load_all(driver, max_scrolls=15)
+
+                # ── Method 0: __NEXT_DATA__ (most reliable for Next.js apps) ─
+                nextjs_products = _extract_nextjs_data(driver, log)
+                if nextjs_products:
+                    all_products = nextjs_products
+                    med_cnt = sum(1 for p in nextjs_products if p.get("is_medicube"))
+                    anua_cnt = sum(1 for p in nextjs_products if p.get("is_anua"))
+                    log(f"[OliveYoung] __NEXT_DATA__ 성공: {len(nextjs_products)}개 | Medicube={med_cnt} Anua={anua_cnt}")
+                    break  # exit attempt loop
 
                 # ── Method 1: BeautifulSoup CSS selector ─────────────────
                 soup = BeautifulSoup(driver.page_source, "lxml")
