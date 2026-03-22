@@ -326,37 +326,47 @@ def _fetch_serpapi_tiktok(hashtag: str, log) -> dict:
     result = {"total_views": None, "total_posts": None, "trending_videos": []}
 
     if not SERPAPI_KEY:
-        # SerpApi 키 없이도 Google 직접 시도
-        try:
-            query = f"tiktok #{hashtag} hashtag views site:ads.tiktok.com OR site:tiktok.com"
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                ),
-                "Accept-Language": "en-US,en;q=0.9",
-            }
-            url = f"https://www.google.com/search?q={requests.utils.quote(query)}&num=5"
-            log(f"[TikTok] Google 검색 시도: {query[:60]}...")
-            resp = requests.get(url, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                # B/M/K 단위 숫자 추출 (예: "7.7B views", "2.3M posts")
+        # SerpApi 키 없이도 여러 쿼리로 Google 직접 시도
+        queries = [
+            f'"{hashtag}" tiktok hashtag views',
+            f"medicube tiktok 해시태그 조회수",
+            f"#medicube tiktok views billion",
+        ]
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        }
+        for query in queries:
+            try:
+                url = f"https://www.google.com/search?q={requests.utils.quote(query)}&num=5&hl=en"
+                log(f"[TikTok] Google 검색: {query}")
+                resp = requests.get(url, headers=headers, timeout=15)
+                if resp.status_code != 200:
+                    log(f"[TikTok] Google HTTP {resp.status_code}")
+                    continue
+                text = resp.text
+                # B/M/K 단위 숫자 추출
                 patterns = [
-                    r"([\d,]+\.?\d*)\s*[Bb]\s*(?:views?|조회)",
-                    r"([\d,]+\.?\d*)\s*[Mm]\s*(?:views?|조회)",
-                    r"#medicube[^<]*?([\d,.]+[BMKbmk])\s*(?:views?|조회)",
+                    r"([\d,.]+)\s*[Bb]\s*(?:views?|조회|재생)",
+                    r"([\d,.]+)\s*[Mm]\s*(?:views?|조회|재생)",
+                    r"([\d,.]+[BMKbmk])\s*(?:views?|조회|재생)",
                 ]
                 for pat in patterns:
-                    m = re.search(pat, resp.text)
+                    m = re.search(pat, text)
                     if m:
                         num = _parse_number(m.group(1))
                         if num and num > 1_000_000:
                             result["total_views"] = num
                             log(f"[TikTok] Google 검색 조회수: {num:,}")
                             return result
-                log("[TikTok] Google 검색 결과에서 TikTok 데이터 없음")
-        except Exception as e:
-            log(f"[TikTok] Google 검색 오류: {e}")
+                log(f"[TikTok] '{query}' - 데이터 없음")
+                time.sleep(1)
+            except Exception as e:
+                log(f"[TikTok] Google 검색 오류: {e}")
         return result
 
     # SerpApi 공식 API 사용
