@@ -1,7 +1,15 @@
-"""TikTok Trend Tracker via Exolyt.com (logged-in analytics)"""
+"""TikTok Trend Tracker via TikTok Creative Center (public API, no login required)
+
+Primary  : TikTok Creative Center API (ads.tiktok.com) - 무료, 로그인 불필요
+Fallback : Exolyt public hashtag page scraping (Selenium, 로그인 불필요)
+"""
 import time
+import requests
 from datetime import datetime
 
+from .config import EXOLYT_HASHTAG_URL, HEADERS
+
+# ── Selenium (Exolyt fallback용) ─────────────────────────────────────────────
 try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
@@ -12,7 +20,6 @@ try:
 except ImportError:
     SELENIUM_AVAILABLE = False
 
-# undetected-chromedriver: Cloudflare 봇 감지 우회
 try:
     import undetected_chromedriver as uc
     UC_AVAILABLE = True
@@ -32,63 +39,97 @@ try:
 except ImportError:
     WDM_AVAILABLE = False
 
-from .config import EXOLYT_EMAIL, EXOLYT_PASSWORD, EXOLYT_LOGIN_URL, EXOLYT_HASHTAG_URL
+
+# ── TikTok Creative Center API ───────────────────────────────────────────────
+
+_CC_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://ads.tiktok.com/business/creativecenter/hashtag/medicube/pc/en",
+    "Origin": "https://ads.tiktok.com",
+}
+
+_CC_DETAIL_URL = (
+    "https://ads.tiktok.com/creative_radar_api/v1/popular_trend/hashtag/detail"
+    "?period=7&hashtag_name={hashtag}&country_code=&language=en"
+)
+_CC_SEARCH_URL = (
+    "https://ads.tiktok.com/creative_radar_api/v1/popular_trend/hashtag/list"
+    "?period=7&page=1&limit=20&order_by=post_num&hashtag_name={hashtag}&country_code=&language=en"
+)
 
 
-def _create_driver(headless: bool = False):
-    """Create a stealth Chrome WebDriver (undetected-chromedriver 우선)."""
-    if not SELENIUM_AVAILABLE:
-        return None
+def _fetch_creative_center(hashtag: str, log) -> dict:
+    """TikTok Creative Center 공개 API로 해시태그 통계 수집."""
+    result = {"total_views": None, "total_posts": None, "trending_videos": []}
 
-    # ── undetected-chromedriver (Cloudflare 우회) ──────────────────
-    if UC_AVAILABLE:
-        try:
-            options = uc.ChromeOptions()
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--window-size=1366,768")
-            options.add_argument("--lang=en-US")
-            if headless:
-                options.add_argument("--headless=new")
-            driver = uc.Chrome(options=options, use_subprocess=True)
-            return driver
-        except Exception:
-            pass  # fallback to regular selenium
+    session = requests.Session()
+    session.headers.update(_CC_HEADERS)
 
-    # ── 일반 selenium fallback ─────────────────────────────────────
+    # ── 1) 상세 정보 API ──────────────────────────────────────────
     try:
-        options = Options()
-        if headless:
-            options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--window-size=1366,768")
-        options.add_argument(
-            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        )
-        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        options.add_experimental_option("useAutomationExtension", False)
-        options.add_argument("--lang=en-US")
-
-        if WDM_AVAILABLE:
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()), options=options
+        url = _CC_DETAIL_URL.format(hashtag=hashtag)
+        log(f"[TikTok] Creative Center API 요청: {hashtag}")
+        resp = session.get(url, timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            info = (
+                data.get("data", {})
+                    .get("hashtag_detail_info", {})
             )
+            if not info:
+                info = data.get("data", {})
+
+            views = info.get("video_views") or info.get("view_count") or info.get("views")
+            posts = info.get("publish_cnt") or info.get("post_num") or info.get("posts")
+
+            if views:
+                result["total_views"] = int(views)
+                log(f"[TikTok] 총 조회수: {result['total_views']:,}")
+            if posts:
+                result["total_posts"] = int(posts)
+                log(f"[TikTok] 게시물 수: {result['total_posts']:,}")
+
+            if result["total_views"] or result["total_posts"]:
+                return result
         else:
-            driver = webdriver.Chrome(options=options)
+            log(f"[TikTok] Creative Center detail API 응답: {resp.status_code}")
+    except Exception as e:
+        log(f"[TikTok] Creative Center detail 오류: {e}")
 
-        driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-        )
-        return driver
-    except Exception:
-        return None
+    # ── 2) 검색 목록 API (fallback) ───────────────────────────────
+    try:
+        url = _CC_SEARCH_URL.format(hashtag=hashtag)
+        resp = session.get(url, timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("data", {}).get("list", [])
+            for item in items:
+                name = (item.get("hashtag_name") or "").lower()
+                if hashtag.lower() in name:
+                    views = item.get("video_views") or item.get("view_count")
+                    posts = item.get("publish_cnt") or item.get("post_num")
+                    if views:
+                        result["total_views"] = int(views)
+                    if posts:
+                        result["total_posts"] = int(posts)
+                    log(f"[TikTok] 검색 결과 - 조회수: {result['total_views']}, 게시물: {result['total_posts']}")
+                    break
+        else:
+            log(f"[TikTok] Creative Center search API 응답: {resp.status_code}")
+    except Exception as e:
+        log(f"[TikTok] Creative Center search 오류: {e}")
 
+    return result
+
+
+# ── Selenium fallback (Exolyt 공개 페이지) ───────────────────────────────────
 
 def _parse_number(text: str):
-    """Parse '1.2B', '345K', '12,345' → int. Returns None on failure."""
     if not text:
         return None
     text = text.strip().replace(",", "").replace(" ", "").replace("\xa0", "")
@@ -104,396 +145,95 @@ def _parse_number(text: str):
         return None
 
 
-def _dismiss_popups(driver, log):
-    """쿠키 동의, GDPR, 닫기 버튼 등 팝업 처리."""
-    popup_selectors = [
-        # 쿠키 동의
-        "button[id*='accept']", "button[class*='accept']",
-        "button[id*='cookie']", "button[class*='cookie']",
-        "[id*='gdpr'] button", "[class*='gdpr'] button",
-        "button[data-cookiefirst-action='accept']",
-        ".cc-btn.cc-allow", ".cookie-consent button",
-        # 일반 닫기
-        "button[aria-label='Close']", "button[aria-label='close']",
-        ".modal-close", ".close-btn", "[class*='close'] button",
-    ]
-    for sel in popup_selectors:
+def _create_driver(headless: bool = False):
+    if not SELENIUM_AVAILABLE:
+        return None
+    if UC_AVAILABLE:
         try:
-            els = driver.find_elements(By.CSS_SELECTOR, sel)
-            for el in els:
-                if el.is_displayed():
-                    driver.execute_script("arguments[0].click();", el)
-                    time.sleep(0.5)
+            options = uc.ChromeOptions()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1366,768")
+            options.add_argument("--lang=en-US")
+            if headless:
+                options.add_argument("--headless=new")
+            return uc.Chrome(options=options, use_subprocess=True)
         except Exception:
             pass
-
-
-def _fill_by_js(driver, selector: str, value: str) -> bool:
-    """JavaScript로 input에 값 입력 (일반 send_keys가 막힐 때 사용)."""
     try:
-        driver.execute_script(
-            f"""
-            var el = document.querySelector('{selector}');
-            if (el) {{
-                el.value = arguments[0];
-                el.dispatchEvent(new Event('input', {{bubbles:true}}));
-                el.dispatchEvent(new Event('change', {{bubbles:true}}));
-            }}
-            """,
-            value,
-        )
-        return True
+        options = Options()
+        if headless:
+            options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1366,768")
+        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+        options.add_experimental_option("useAutomationExtension", False)
+        if WDM_AVAILABLE:
+            return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        return webdriver.Chrome(options=options)
     except Exception:
-        return False
+        return None
 
 
-def _wait_for_visible_input(driver, timeout: int = 20):
-    """화면에 보이는 텍스트/이메일 input이 나타날 때까지 폴링으로 대기."""
-    skip_types = {"hidden", "submit", "button", "checkbox", "radio", "file", "image", "reset"}
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            inputs = driver.find_elements(By.TAG_NAME, "input")
-            visible = [
-                i for i in inputs
-                if i.is_displayed() and i.get_attribute("type") not in skip_types
-            ]
-            if visible:
-                return visible
-        except Exception:
-            pass
-        time.sleep(0.5)
-    return []
+def _fetch_exolyt_public(hashtag: str, log, headless: bool = False) -> dict:
+    """Exolyt 공개 해시태그 페이지에서 수집 (로그인 불필요)."""
+    result = {"total_views": None, "total_posts": None, "trending_videos": []}
 
-
-def _find_input(driver, selectors: list, wait_sec: int = 20):
-    """보이는 input이 렌더링될 때까지 기다린 뒤 셀렉터를 즉시 확인."""
-    _wait_for_visible_input(driver, timeout=wait_sec)
-
-    for sel in selectors:
-        try:
-            els = driver.find_elements(By.CSS_SELECTOR, sel)
-            for el in els:
-                if el.is_displayed():
-                    return el, sel
-        except Exception:
-            continue
-    return None, None
-
-
-def _login_exolyt(driver, email: str, password: str, log) -> bool:
-    """Log into Exolyt. Returns True if login appears successful."""
-    try:
-        log(f"[TikTok] Exolyt 로그인 중... ({email})")
-
-        # ── Step 1: 홈 페이지 로딩 (SPA hydration) ────────────────
-        driver.get("https://exolyt.com/en")
-        try:
-            WebDriverWait(driver, 15).until(
-                lambda d: d.execute_script("return document.readyState") == "complete"
-            )
-        except Exception:
-            pass
-        time.sleep(3)
-        _dismiss_popups(driver, log)
-
-        # ── Step 2: 네비게이션의 Login 버튼 클릭 ─────────────────
-        login_btn_selectors = [
-            "a[href*='login']",
-            "a[href*='sign']",
-            "button[class*='login' i]",
-            "button[class*='sign' i]",
-            "[data-testid*='login']",
-            "nav a", "header a",
-        ]
-        login_clicked = False
-        for sel in login_btn_selectors:
-            try:
-                els = driver.find_elements(By.CSS_SELECTOR, sel)
-                for el in els:
-                    text = (el.text or "").lower()
-                    href = (el.get_attribute("href") or "").lower()
-                    if el.is_displayed() and ("log" in text or "sign" in text or "login" in href):
-                        driver.execute_script("arguments[0].click();", el)
-                        log(f"[TikTok] 로그인 버튼 클릭: '{el.text.strip()}' ({sel})")
-                        login_clicked = True
-                        time.sleep(3)
-                        break
-            except Exception:
-                continue
-            if login_clicked:
-                break
-
-        if not login_clicked:
-            # 직접 로그인 URL로 이동
-            log("[TikTok] 로그인 버튼 미발견 → 직접 URL 이동")
-            driver.get(EXOLYT_LOGIN_URL)
-            try:
-                WebDriverWait(driver, 15).until(
-                    lambda d: d.execute_script("return document.readyState") == "complete"
-                )
-            except Exception:
-                pass
-            time.sleep(3)
-        _dismiss_popups(driver, log)
-
-        # ── 이메일 입력 ───────────────────────────────────
-        email_selectors = [
-            "input[type='email']",
-            "input[name='email']",
-            "input[autocomplete='email']",
-            "input[placeholder*='email' i]",
-            "input[placeholder*='이메일' i]",
-            "#email", "#username",
-            "input[name='username']",
-            "input[name='login']",
-            "form input",
-        ]
-        email_input, matched_sel = _find_input(driver, email_selectors, wait_sec=20)
-
-        if email_input is None:
-            # 최후 fallback: visible input 중 첫 번째
-            try:
-                all_inputs = driver.find_elements(By.TAG_NAME, "input")
-                visible = [i for i in all_inputs
-                           if i.is_displayed() and i.get_attribute("type") != "hidden"]
-                if visible:
-                    email_input = visible[0]
-                    matched_sel = "첫 번째 visible input"
-            except Exception:
-                pass
-
-        if email_input is None:
-            log("[TikTok] 이메일 입력창을 찾을 수 없습니다.")
-            log(f"[TikTok] 현재 URL: {driver.current_url}")
-            # ── 상세 디버그 ──────────────────────────────
-            try:
-                all_inputs = driver.find_elements(By.TAG_NAME, "input")
-                log(f"[TikTok] 페이지 내 input 총 {len(all_inputs)}개:")
-                for i, inp in enumerate(all_inputs[:8]):
-                    try:
-                        log(f"  [{i}] type={inp.get_attribute('type')} "
-                            f"name={inp.get_attribute('name')} "
-                            f"id={inp.get_attribute('id')} "
-                            f"visible={inp.is_displayed()}")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                body_text = driver.find_element(By.TAG_NAME, "body").text[:800]
-                log(f"[TikTok] 페이지 본문(800자): {body_text}")
-            except Exception:
-                try:
-                    log(f"[TikTok] 페이지 소스(800자): {driver.page_source[:800]}")
-                except Exception:
-                    pass
-            return False
-
-        log(f"[TikTok] 이메일 필드 발견: {matched_sel}")
-        try:
-            email_input.clear()
-            email_input.click()
-            email_input.send_keys(email)
-        except Exception:
-            _fill_by_js(driver, "input[type='email']", email)
-        time.sleep(0.3)
-
-        # ── 비밀번호 입력 ─────────────────────────────────
-        pwd_selectors = [
-            "input[type='password']",
-            "input[name='password']",
-            "input[autocomplete='current-password']",
-            "#password",
-        ]
-        pwd_input, pwd_sel = _find_input(driver, pwd_selectors, wait_sec=5)
-
-        if pwd_input is None:
-            # password 타입 fallback
-            try:
-                all_inputs = driver.find_elements(By.TAG_NAME, "input")
-                for inp in all_inputs:
-                    if inp.get_attribute("type") == "password":
-                        pwd_input = inp
-                        pwd_sel = "type=password fallback"
-                        break
-            except Exception:
-                pass
-
-        if pwd_input is None:
-            log("[TikTok] 비밀번호 입력창을 찾을 수 없습니다.")
-            return False
-
-        log(f"[TikTok] 비밀번호 필드 발견: {pwd_sel}")
-        try:
-            pwd_input.clear()
-            pwd_input.click()
-            pwd_input.send_keys(password)
-        except Exception:
-            _fill_by_js(driver, "input[type='password']", password)
-        time.sleep(0.3)
-
-        # ── 로그인 버튼 클릭 ──────────────────────────────
-        submitted = False
-        btn_selectors = [
-            "button[type='submit']",
-            "input[type='submit']",
-            "button[class*='login']", "button[class*='Login']",
-            "button[class*='sign']", "button[class*='Sign']",
-            "button[class*='submit']",
-            "button.btn-primary",
-            "form button",
-        ]
-        for sel in btn_selectors:
-            try:
-                btns = driver.find_elements(By.CSS_SELECTOR, sel)
-                for btn in btns:
-                    if btn.is_displayed():
-                        driver.execute_script("arguments[0].click();", btn)
-                        submitted = True
-                        log(f"[TikTok] 로그인 버튼 클릭: {sel}")
-                        break
-                if submitted:
-                    break
-            except Exception:
-                continue
-
-        if not submitted:
-            log("[TikTok] 버튼 없음 → Enter 키 입력")
-            pwd_input.send_keys(Keys.RETURN)
-
-        time.sleep(5)
-
-        # ── 로그인 결과 확인 ──────────────────────────────
-        current_url = driver.current_url.lower()
-        log(f"[TikTok] 로그인 후 URL: {current_url}")
-
-        if "login" not in current_url:
-            log("[TikTok] Exolyt 로그인 성공!")
-            return True
-
-        # 에러 메시지 확인
-        try:
-            error_els = driver.find_elements(
-                By.CSS_SELECTOR,
-                ".error, .alert, .alert-danger, [class*='error'], [class*='Error'], [role='alert']"
-            )
-            for el in error_els:
-                msg = el.text.strip()
-                if msg:
-                    log(f"[TikTok] 로그인 오류 메시지: {msg}")
-        except Exception:
-            pass
-
-        # URL에 login이 남아있어도 실제로 로그인됐을 수 있음 (일부 SPA)
-        try:
-            page_text = driver.find_element(By.TAG_NAME, "body").text
-            success_hints = ["dashboard", "profile", "logout", "sign out", "my account"]
-            if any(h in page_text.lower() for h in success_hints):
-                log("[TikTok] 로그인 성공 확인 (페이지 내용 기반)")
-                return True
-        except Exception:
-            pass
-
-        log("[TikTok] 로그인 실패 - URL이 여전히 login 페이지")
-        return False
-
-    except Exception as e:
-        log(f"[TikTok] 로그인 오류: {e}")
-        return False
-
-
-def _scrape_hashtag_page(driver, log) -> dict:
-    """Scrape stats from Exolyt hashtag page."""
-    result = {
-        "total_views": None,
-        "total_posts": None,
-        "trending_videos": [],
-    }
+    driver = _create_driver(headless=headless)
+    if driver is None:
+        log("[TikTok] Exolyt fallback: Chrome WebDriver 시작 실패")
+        return result
 
     try:
-        log(f"[TikTok] 해시태그 페이지 로딩: {EXOLYT_HASHTAG_URL}")
-        driver.get(EXOLYT_HASHTAG_URL)
-        time.sleep(7)
-
-        # Scroll to trigger dynamic loading
+        url = f"https://exolyt.com/hashtags/{hashtag}"
+        log(f"[TikTok] Exolyt 공개 페이지 접근: {url}")
+        driver.get(url)
+        time.sleep(8)
         driver.execute_script("window.scrollTo(0, 500);")
         time.sleep(2)
-        driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(1)
 
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(driver.page_source, "lxml")
-
-        # ── Strategy 1: look for stat cards/boxes with numeric values ──
         candidates = []
 
-        stat_selectors = [
-            ".stat-value", ".stats-value", ".metric-value", ".stat-count",
-            "[class*='stat'] strong", "[class*='count'] span",
-            "[class*='view'] strong", "[class*='video'] strong",
-            ".info-value", ".data-value", ".number", "strong",
-            "[class*='analytics'] span", "[class*='hashtag'] span",
-            ".card-value", ".total", "h2 span", "h3 span",
-        ]
-
-        for sel in stat_selectors:
-            for el in soup.select(sel):
-                txt = el.get_text(strip=True)
-                if not txt:
-                    continue
-                first_token = txt.split()[0] if txt.split() else txt
-                num = _parse_number(first_token)
-                if num and num >= 1000:
-                    label_el = el.find_parent()
-                    label = label_el.get_text(strip=True)[:50] if label_el else txt
-                    candidates.append((num, label))
-
-        # ── Strategy 2: generic large numbers in the page ──
-        if not candidates:
-            for tag in soup.find_all(["strong", "h1", "h2", "h3", "span", "p", "div"]):
-                txt = tag.get_text(strip=True)
-                if not txt or len(txt) > 30:
-                    continue
-                first_token = txt.split()[0] if txt.split() else txt
-                num = _parse_number(first_token)
-                if num and num >= 10_000:
-                    candidates.append((num, txt))
+        for tag in soup.find_all(["strong", "span", "h1", "h2", "h3", "p", "div"]):
+            txt = tag.get_text(strip=True)
+            if not txt or len(txt) > 30:
+                continue
+            token = txt.split()[0] if txt.split() else txt
+            num = _parse_number(token)
+            if num and num >= 10_000:
+                candidates.append((num, txt))
 
         candidates.sort(key=lambda x: -x[0])
-        log(f"[TikTok] 발견된 숫자 후보: {candidates[:5]}")
+        log(f"[TikTok] Exolyt 숫자 후보: {candidates[:3]}")
 
         if candidates:
             result["total_views"] = candidates[0][0]
-            log(f"[TikTok] 총 조회수: {candidates[0][0]:,}")
         if len(candidates) > 1:
             result["total_posts"] = candidates[1][0]
-            log(f"[TikTok] 영상/게시물: {candidates[1][0]:,}")
-
-        # ── Trending video links ──
+    except Exception as e:
+        log(f"[TikTok] Exolyt 공개 페이지 오류: {e}")
+    finally:
         try:
-            for el in driver.find_elements(By.CSS_SELECTOR, "a[href*='tiktok.com/']"):
-                href = el.get_attribute("href") or ""
-                if href and "/video/" in href:
-                    result["trending_videos"].append({
-                        "url": href,
-                        "text": el.text.strip()[:100],
-                    })
-                    if len(result["trending_videos"]) >= 10:
-                        break
+            driver.quit()
         except Exception:
             pass
-
-    except Exception as e:
-        log(f"[TikTok] 페이지 파싱 오류: {e}")
 
     return result
 
 
-def fetch_tiktok_trends(log_callback=None, headless: bool = True) -> dict:
+# ── 공개 진입점 ──────────────────────────────────────────────────────────────
+
+def fetch_tiktok_trends(log_callback=None, headless: bool = False) -> dict:
     """
-    Fetch TikTok #medicube hashtag analytics via Exolyt.com.
-    Logs into Exolyt with configured credentials and scrapes hashtag stats.
+    TikTok #medicube 해시태그 통계 수집.
+
+    우선순위:
+      1) TikTok Creative Center 공개 API (로그인 불필요, 빠름)
+      2) Exolyt 공개 해시태그 페이지 scraping (Selenium)
     """
     def log(msg):
         if log_callback:
@@ -501,53 +241,40 @@ def fetch_tiktok_trends(log_callback=None, headless: bool = True) -> dict:
         else:
             print(msg)
 
+    hashtag = "medicube"
     result = {
-        "hashtag": "medicube",
+        "hashtag": hashtag,
         "total_views": None,
         "total_posts": None,
         "trending_videos": [],
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": None,
     }
 
-    if not SELENIUM_AVAILABLE:
-        log("[TikTok] selenium이 설치되지 않았습니다. pip install selenium webdriver-manager")
-        result["error"] = "selenium not installed"
-        return result
-
-    driver = _create_driver(headless=headless)
-    if driver is None:
-        log("[TikTok] Chrome WebDriver를 시작할 수 없습니다.")
-        result["error"] = "WebDriver not available"
-        return result
-
-    try:
-        if not EXOLYT_EMAIL or not EXOLYT_PASSWORD:
-            log("[TikTok] config.py에 Exolyt 이메일/비밀번호가 설정되지 않았습니다.")
-            result["error"] = "no credentials"
-            return result
-
-        login_ok = _login_exolyt(driver, EXOLYT_EMAIL, EXOLYT_PASSWORD, log)
-        if not login_ok:
-            log("[TikTok] ❌ Exolyt 로그인 실패. 이메일/비밀번호를 확인하세요.")
-            result["error"] = "login failed"
-            return result
-
-        stats = _scrape_hashtag_page(driver, log)
-        result["total_views"] = stats["total_views"]
-        result["total_posts"] = stats["total_posts"]
-        result["trending_videos"] = stats["trending_videos"]
-
-        views_disp = f"{result['total_views']:,}" if result["total_views"] else "수집 불가"
-        posts_disp = f"{result['total_posts']:,}" if result["total_posts"] else "수집 불가"
+    # ── 1차: TikTok Creative Center API ──────────────────────────
+    log("[TikTok] TikTok Creative Center API 시도...")
+    cc = _fetch_creative_center(hashtag, log)
+    if cc.get("total_views") or cc.get("total_posts"):
+        result.update(cc)
+        result["source"] = "TikTok Creative Center"
+        views_disp = f"{result['total_views']:,}" if result["total_views"] else "N/A"
+        posts_disp = f"{result['total_posts']:,}" if result["total_posts"] else "N/A"
         log(f"[TikTok] ✅ 완료 - 조회수: {views_disp} / 게시물: {posts_disp}")
+        return result
 
-    except Exception as e:
-        log(f"[TikTok] 오류: {e}")
-        result["error"] = str(e)
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+    log("[TikTok] Creative Center API 데이터 없음 → Exolyt 공개 페이지 시도...")
 
+    # ── 2차: Exolyt 공개 페이지 (Selenium) ───────────────────────
+    if SELENIUM_AVAILABLE:
+        ex = _fetch_exolyt_public(hashtag, log, headless=headless)
+        if ex.get("total_views") or ex.get("total_posts"):
+            result.update(ex)
+            result["source"] = "Exolyt (public)"
+            views_disp = f"{result['total_views']:,}" if result["total_views"] else "N/A"
+            posts_disp = f"{result['total_posts']:,}" if result["total_posts"] else "N/A"
+            log(f"[TikTok] ✅ Exolyt 완료 - 조회수: {views_disp} / 게시물: {posts_disp}")
+            return result
+
+    log("[TikTok] ⚠️ 모든 소스에서 데이터 수집 실패 (네트워크/차단 확인)")
+    result["error"] = "all sources failed"
     return result
