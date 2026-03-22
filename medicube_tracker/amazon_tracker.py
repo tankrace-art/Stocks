@@ -50,14 +50,28 @@ def _make_driver(headless: bool = True):
         except Exception:
             driver = webdriver.Chrome(options=options)
 
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-            """
-        })
+        # Apply selenium-stealth if available (much harder to detect)
+        try:
+            from selenium_stealth import stealth
+            stealth(
+                driver,
+                languages=["en-US", "en"],
+                vendor="Google Inc.",
+                platform="Win32",
+                webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine",
+                fix_hairline=True,
+            )
+        except ImportError:
+            # Fallback: manual patching
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": """
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                """
+            })
         return driver
     except Exception:
         return None
@@ -153,6 +167,38 @@ def _page_url(base: str, page: int) -> str:
     return base + f"/ref=zg_bs_pg_{page}?_encoding=UTF8&pg={page}"
 
 
+def _alt_page_url(domain: str, page: int) -> str:
+    """Alternative URL pattern using /gp/bestsellers/beauty/."""
+    base = f"https://www.{domain}/gp/bestsellers/beauty"
+    if page == 1:
+        return base + "/"
+    return base + f"/ref=zg_bs_pg_{page}?_encoding=UTF8&pg={page}"
+
+
+def _dismiss_cookie_banner(driver):
+    """Try to dismiss EU cookie consent banners."""
+    try:
+        from selenium.webdriver.common.by import By
+        selectors = [
+            "input[data-action-type='DISMISS']",
+            "#sp-cc-accept",
+            "[data-cel-widget='sp-cc'] input[value='Accept']",
+            "button[id*='accept']",
+            "button[id*='cookie']",
+        ]
+        for sel in selectors:
+            try:
+                btn = driver.find_element(By.CSS_SELECTOR, sel)
+                if btn.is_displayed():
+                    btn.click()
+                    time.sleep(1)
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None) -> dict:
     """Selenium-based fetch (primary method - bypasses bot detection better)."""
     def log(m):
@@ -167,10 +213,12 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
     all_texts: list[str] = []
     try:
         domain = country_info["domain"]
-        # Warm up with homepage first
+        # Warm up with homepage first (sets cookies, looks human)
         try:
             driver.get(f"https://www.{domain}/")
-            time.sleep(random.uniform(2, 3))
+            time.sleep(random.uniform(3, 5))
+            _dismiss_cookie_banner(driver)
+            time.sleep(random.uniform(1, 2))
         except Exception:
             pass
 
@@ -178,16 +226,15 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
             url = _page_url(country_info["url"], page)
             log(f"[Amazon {country_name}] 페이지{page} 로딩 중... (1~50위 / 51~100위)")
             driver.get(url)
-            time.sleep(random.uniform(4, 6))
+            time.sleep(random.uniform(5, 8))
+            _dismiss_cookie_banner(driver)
 
             # ── 천천히 스크롤하여 lazy-load 아이템 전부 로드 ──────────────
-            # 아마존은 스크롤 시 아이템이 lazy-load됨 (페이지당 50개)
-            # 10단계로 나눠 스크롤해야 모든 항목이 DOM에 추가됨
             for step in range(1, 11):
                 driver.execute_script(
                     f"window.scrollTo(0, document.body.scrollHeight * {step / 10});"
                 )
-                time.sleep(0.8)
+                time.sleep(random.uniform(0.6, 1.2))
             time.sleep(2)
 
             # 맨 위로 돌아와서 최종 렌더링 확인
@@ -198,15 +245,26 @@ def _fetch_via_selenium(country_name: str, country_info: dict, log_callback=None
 
             html = driver.page_source
             if _is_blocked(html):
-                log(f"[Amazon {country_name}] 봇 감지됨 - 다음으로")
-                break
+                log(f"[Amazon {country_name}] 봇 감지됨 - 대체 URL 시도...")
+                # Try alternative URL pattern
+                alt_url = _alt_page_url(domain, page)
+                if alt_url != url:
+                    driver.get(alt_url)
+                    time.sleep(random.uniform(5, 7))
+                    _dismiss_cookie_banner(driver)
+                    html = driver.page_source
+                    if _is_blocked(html):
+                        log(f"[Amazon {country_name}] 대체 URL도 봇 감지됨 - 다음으로")
+                        break
+                else:
+                    break
 
             texts = _extract_products_from_html(html)
             all_texts.extend(texts)
             log(f"[Amazon {country_name}] 페이지{page}: {len(texts)}개 항목 수집 (누적: {len(all_texts)}개)")
 
             if page < 2:
-                time.sleep(random.uniform(3, 5))
+                time.sleep(random.uniform(4, 7))
 
     except Exception as e:
         log(f"[Amazon {country_name}] Selenium 오류: {e}")
@@ -237,17 +295,23 @@ def _fetch_via_requests(country_name: str, country_info: dict, log_callback=None
     all_texts: list[str] = []
     blocked = False
 
+    # Warm up: visit homepage to get cookies
+    try:
+        session.get(f"https://www.{domain}/", timeout=15)
+        time.sleep(random.uniform(2, 3))
+    except Exception:
+        pass
+
     for page in [1, 2]:
         url = _page_url(base_url, page)
         try:
-            if page == 1:
-                try:
-                    session.get(f"https://www.{domain}/", timeout=10)
-                    time.sleep(random.uniform(1, 2))
-                except Exception:
-                    pass
-
             resp = session.get(url, timeout=25)
+            if resp.status_code == 404:
+                # Try alternative URL pattern
+                alt_url = _alt_page_url(domain, page)
+                log(f"[Amazon {country_name}] 404 → 대체 URL 시도")
+                resp = session.get(alt_url, timeout=25)
+
             if resp.status_code != 200:
                 log(f"[Amazon {country_name}] HTTP {resp.status_code}")
                 blocked = True
@@ -261,7 +325,7 @@ def _fetch_via_requests(country_name: str, country_info: dict, log_callback=None
             texts = _extract_products_from_html(resp.text)
             all_texts.extend(texts)
             log(f"[Amazon {country_name}] 페이지{page}: {len(texts)}개 항목")
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(3.0, 5.0))
 
         except requests.RequestException as e:
             log(f"[Amazon {country_name}] 네트워크 오류: {e}")
