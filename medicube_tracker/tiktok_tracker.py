@@ -120,21 +120,38 @@ def _fill_by_js(driver, selector: str, value: str) -> bool:
         return False
 
 
+def _find_input(driver, selectors: list, wait_sec: int = 20):
+    """페이지가 로딩될 때까지 한 번만 기다린 뒤, 셀렉터를 순서대로 즉시 확인."""
+    # 먼저 어떤 input이든 나타날 때까지 최대 wait_sec 초 대기
+    try:
+        WebDriverWait(driver, wait_sec).until(
+            EC.presence_of_element_located((By.TAG_NAME, "input"))
+        )
+    except TimeoutException:
+        pass
+
+    for sel in selectors:
+        try:
+            els = driver.find_elements(By.CSS_SELECTOR, sel)
+            for el in els:
+                if el.is_displayed():
+                    return el, sel
+        except Exception:
+            continue
+    return None, None
+
+
 def _login_exolyt(driver, email: str, password: str, log) -> bool:
     """Log into Exolyt. Returns True if login appears successful."""
     try:
         log(f"[TikTok] Exolyt 로그인 중... ({email})")
         driver.get(EXOLYT_LOGIN_URL)
-        time.sleep(5)
+        time.sleep(2)
 
         # 팝업(쿠키 동의 등) 먼저 닫기
         _dismiss_popups(driver, log)
-        time.sleep(1)
-
-        wait = WebDriverWait(driver, 20)
 
         # ── 이메일 입력 ───────────────────────────────────
-        email_input = None
         email_selectors = [
             "input[type='email']",
             "input[name='email']",
@@ -144,64 +161,60 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
             "#email", "#username",
             "input[name='username']",
             "input[name='login']",
-            "form input:first-of-type",
+            "form input",
         ]
-        for sel in email_selectors:
-            try:
-                el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel)))
-                email_input = el
-                log(f"[TikTok] 이메일 필드 발견: {sel}")
-                break
-            except TimeoutException:
-                continue
+        email_input, matched_sel = _find_input(driver, email_selectors, wait_sec=20)
 
         if email_input is None:
-            # JS fallback: 페이지의 첫 번째 input 사용
+            # 최후 fallback: visible input 중 첫 번째
             try:
-                inputs = driver.find_elements(By.TAG_NAME, "input")
-                visible = [i for i in inputs if i.is_displayed() and i.get_attribute("type") != "hidden"]
+                all_inputs = driver.find_elements(By.TAG_NAME, "input")
+                visible = [i for i in all_inputs
+                           if i.is_displayed() and i.get_attribute("type") != "hidden"]
                 if visible:
                     email_input = visible[0]
-                    log("[TikTok] 이메일 필드: 첫 번째 visible input 사용")
+                    matched_sel = "첫 번째 visible input"
             except Exception:
                 pass
 
         if email_input is None:
             log("[TikTok] 이메일 입력창을 찾을 수 없습니다.")
             log(f"[TikTok] 현재 URL: {driver.current_url}")
+            # 페이지 소스 일부 출력 (디버그용)
+            try:
+                src = driver.page_source[:500]
+                log(f"[TikTok] 페이지 소스(500자): {src}")
+            except Exception:
+                pass
             return False
 
+        log(f"[TikTok] 이메일 필드 발견: {matched_sel}")
         try:
             email_input.clear()
             email_input.click()
-            time.sleep(0.3)
             email_input.send_keys(email)
         except Exception:
-            _fill_by_js(driver, email_selectors[0], email)
-        time.sleep(0.5)
+            _fill_by_js(driver, "input[type='email']", email)
+        time.sleep(0.3)
 
         # ── 비밀번호 입력 ─────────────────────────────────
-        pwd_input = None
-        for sel in ["input[type='password']", "input[name='password']",
-                    "input[autocomplete='current-password']", "#password"]:
-            try:
-                pwd_input = driver.find_element(By.CSS_SELECTOR, sel)
-                if pwd_input.is_displayed():
-                    log(f"[TikTok] 비밀번호 필드 발견: {sel}")
-                    break
-            except NoSuchElementException:
-                continue
+        pwd_selectors = [
+            "input[type='password']",
+            "input[name='password']",
+            "input[autocomplete='current-password']",
+            "#password",
+        ]
+        pwd_input, pwd_sel = _find_input(driver, pwd_selectors, wait_sec=5)
 
         if pwd_input is None:
+            # password 타입 fallback
             try:
-                inputs = driver.find_elements(By.TAG_NAME, "input")
-                for inp in inputs:
-                    if inp.get_attribute("type") == "password" or inp.is_displayed():
-                        # skip the email one
-                        if inp != email_input:
-                            pwd_input = inp
-                            log("[TikTok] 비밀번호 필드: fallback input 사용")
-                            break
+                all_inputs = driver.find_elements(By.TAG_NAME, "input")
+                for inp in all_inputs:
+                    if inp.get_attribute("type") == "password":
+                        pwd_input = inp
+                        pwd_sel = "type=password fallback"
+                        break
             except Exception:
                 pass
 
@@ -209,14 +222,14 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
             log("[TikTok] 비밀번호 입력창을 찾을 수 없습니다.")
             return False
 
+        log(f"[TikTok] 비밀번호 필드 발견: {pwd_sel}")
         try:
             pwd_input.clear()
             pwd_input.click()
-            time.sleep(0.3)
             pwd_input.send_keys(password)
         except Exception:
             _fill_by_js(driver, "input[type='password']", password)
-        time.sleep(0.5)
+        time.sleep(0.3)
 
         # ── 로그인 버튼 클릭 ──────────────────────────────
         submitted = False
@@ -231,11 +244,14 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
         ]
         for sel in btn_selectors:
             try:
-                btn = driver.find_element(By.CSS_SELECTOR, sel)
-                if btn.is_displayed():
-                    driver.execute_script("arguments[0].click();", btn)
-                    submitted = True
-                    log(f"[TikTok] 로그인 버튼 클릭: {sel}")
+                btns = driver.find_elements(By.CSS_SELECTOR, sel)
+                for btn in btns:
+                    if btn.is_displayed():
+                        driver.execute_script("arguments[0].click();", btn)
+                        submitted = True
+                        log(f"[TikTok] 로그인 버튼 클릭: {sel}")
+                        break
+                if submitted:
                     break
             except Exception:
                 continue
@@ -244,7 +260,7 @@ def _login_exolyt(driver, email: str, password: str, log) -> bool:
             log("[TikTok] 버튼 없음 → Enter 키 입력")
             pwd_input.send_keys(Keys.RETURN)
 
-        time.sleep(8)
+        time.sleep(5)
 
         # ── 로그인 결과 확인 ──────────────────────────────
         current_url = driver.current_url.lower()
