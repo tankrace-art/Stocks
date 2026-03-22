@@ -75,14 +75,16 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
         url = _CC_DETAIL_URL.format(hashtag=hashtag)
         log(f"[TikTok] Creative Center API 요청: {hashtag}")
         resp = session.get(url, timeout=20)
+        log(f"[TikTok] Creative Center 응답: HTTP {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
-            info = (
-                data.get("data", {})
-                    .get("hashtag_detail_info", {})
-            )
+            # 응답 구조 로그 (디버그)
+            log(f"[TikTok] API 응답 키: {list(data.keys())}")
+            info = data.get("data", {}).get("hashtag_detail_info", {})
             if not info:
                 info = data.get("data", {})
+            if isinstance(info, dict):
+                log(f"[TikTok] data 키: {list(info.keys())[:8]}")
 
             views = info.get("video_views") or info.get("view_count") or info.get("views")
             posts = info.get("publish_cnt") or info.get("post_num") or info.get("posts")
@@ -97,7 +99,7 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
             if result["total_views"] or result["total_posts"]:
                 return result
         else:
-            log(f"[TikTok] Creative Center detail API 응답: {resp.status_code}")
+            log(f"[TikTok] 응답 내용(200자): {resp.text[:200]}")
     except Exception as e:
         log(f"[TikTok] Creative Center detail 오류: {e}")
 
@@ -105,6 +107,7 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
     try:
         url = _CC_SEARCH_URL.format(hashtag=hashtag)
         resp = session.get(url, timeout=20)
+        log(f"[TikTok] CC search 응답: HTTP {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("data", {}).get("list", [])
@@ -120,9 +123,82 @@ def _fetch_creative_center(hashtag: str, log) -> dict:
                     log(f"[TikTok] 검색 결과 - 조회수: {result['total_views']}, 게시물: {result['total_posts']}")
                     break
         else:
-            log(f"[TikTok] Creative Center search API 응답: {resp.status_code}")
+            log(f"[TikTok] CC search 응답(200자): {resp.text[:200]}")
     except Exception as e:
         log(f"[TikTok] Creative Center search 오류: {e}")
+
+    return result
+
+
+def _fetch_tiktok_tag_page(hashtag: str, log) -> dict:
+    """TikTok 태그 페이지의 __NEXT_DATA__ JSON에서 해시태그 통계 수집."""
+    import json, re
+    result = {"total_views": None, "total_posts": None, "trending_videos": []}
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        url = f"https://www.tiktok.com/tag/{hashtag}"
+        log(f"[TikTok] 태그 페이지 요청: {url}")
+        resp = requests.get(url, headers=headers, timeout=20)
+        log(f"[TikTok] 태그 페이지 응답: HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            log(f"[TikTok] 응답(200자): {resp.text[:200]}")
+            return result
+
+        html = resp.text
+
+        # __NEXT_DATA__ JSON 추출
+        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if m:
+            try:
+                nd = json.loads(m.group(1))
+                # 해시태그 통계는 다양한 경로에 있을 수 있음
+                challenge = (
+                    nd.get("props", {}).get("pageProps", {}).get("challengeInfo", {})
+                    or nd.get("props", {}).get("pageProps", {}).get("itemList", [{}])[0]
+                )
+                stats = challenge.get("stats") or challenge.get("challengeInfo", {}).get("stats", {})
+                views = stats.get("videoCount") or stats.get("viewCount")
+                posts = stats.get("videoCount")
+                if views:
+                    result["total_views"] = int(views)
+                    log(f"[TikTok] __NEXT_DATA__ 조회수: {result['total_views']:,}")
+                if posts:
+                    result["total_posts"] = int(posts)
+            except Exception as e:
+                log(f"[TikTok] __NEXT_DATA__ 파싱 오류: {e}")
+
+        # SIGI_STATE JSON 추출 (TikTok alternative)
+        if not result["total_views"]:
+            m2 = re.search(r'<script id="SIGI_STATE"[^>]*>(.*?)</script>', html, re.DOTALL)
+            if m2:
+                try:
+                    sd = json.loads(m2.group(1))
+                    # 해시태그 뷰카운트 탐색
+                    for key in ["ChallengePage", "challengeDetail", "hashtag"]:
+                        obj = sd.get(key, {})
+                        if obj:
+                            stats = obj.get("stats") or obj.get("challengeInfo", {}).get("stats", {})
+                            views = stats.get("videoCount") or stats.get("viewCount")
+                            if views:
+                                result["total_views"] = int(views)
+                                log(f"[TikTok] SIGI_STATE 조회수: {result['total_views']:,}")
+                                break
+                except Exception as e:
+                    log(f"[TikTok] SIGI_STATE 파싱 오류: {e}")
+
+        if not result["total_views"]:
+            log(f"[TikTok] 태그 페이지 HTML(500자): {html[:500]}")
+
+    except Exception as e:
+        log(f"[TikTok] 태그 페이지 오류: {e}")
 
     return result
 
@@ -262,9 +338,20 @@ def fetch_tiktok_trends(log_callback=None, headless: bool = False) -> dict:
         log(f"[TikTok] ✅ 완료 - 조회수: {views_disp} / 게시물: {posts_disp}")
         return result
 
-    log("[TikTok] Creative Center API 데이터 없음 → Exolyt 공개 페이지 시도...")
+    log("[TikTok] Creative Center API 데이터 없음 → TikTok 태그 페이지 시도...")
 
-    # ── 2차: Exolyt 공개 페이지 (Selenium) ───────────────────────
+    # ── 2차: TikTok 태그 페이지 직접 스크래핑 ────────────────────
+    tt = _fetch_tiktok_tag_page(hashtag, log)
+    if tt.get("total_views") or tt.get("total_posts"):
+        result.update(tt)
+        result["source"] = "TikTok tag page"
+        views_disp = f"{result['total_views']:,}" if result["total_views"] else "N/A"
+        log(f"[TikTok] ✅ 태그 페이지 완료 - 조회수: {views_disp}")
+        return result
+
+    log("[TikTok] 태그 페이지 데이터 없음 → Exolyt 공개 페이지 시도...")
+
+    # ── 3차: Exolyt 공개 페이지 (Selenium) ───────────────────────
     if SELENIUM_AVAILABLE:
         ex = _fetch_exolyt_public(hashtag, log, headless=headless)
         if ex.get("total_views") or ex.get("total_posts"):
