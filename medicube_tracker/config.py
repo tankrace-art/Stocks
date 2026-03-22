@@ -43,6 +43,10 @@ GOOGLE_TRENDS_KEYWORDS = ["medicube"]
 GOOGLE_TRENDS_GEO = ""  # Worldwide
 GOOGLE_TRENDS_TIMEFRAME = "today 3-m"  # Last 3 months
 
+# SerpAPI (Google Trends 대체 - 월 100건 무료)
+# API 키 발급: https://serpapi.com/ 에서 무료 가입
+SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
+
 # Output settings
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "medicube_reports")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
