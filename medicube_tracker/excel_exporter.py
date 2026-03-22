@@ -187,50 +187,6 @@ def _create_google_trends_sheet(wb: openpyxl.Workbook, trends_data: dict):
     ws.freeze_panes = "A3"
 
 
-def _create_tiktok_sheet(wb: openpyxl.Workbook, tiktok_data: dict):
-    """Create TikTok trends sheet."""
-    ws = wb.create_sheet("TikTok 트렌드")
-    fetched_at = tiktok_data.get("fetched_at", "")
-
-    ws.merge_cells("A1:E1")
-    _style_header_cell(ws["A1"], f"TikTok #medicube 트렌드  (수집: {fetched_at})", size=13)
-    ws.row_dimensions[1].height = 28
-
-    # Stats
-    stats = [
-        ("총 조회수 (Views)", tiktok_data.get("total_views")),
-        ("총 게시물 수 (Posts)", tiktok_data.get("total_posts")),
-    ]
-    for i, (label, value) in enumerate(stats):
-        row = 3 + i
-        ws.cell(row=row, column=1).value = label
-        ws.cell(row=row, column=1).font = Font(bold=True, size=11, name="맑은 고딕")
-        display_val = f"{value:,}" if isinstance(value, int) else (value or "수집 불가")
-        ws.cell(row=row, column=2).value = display_val
-        ws.cell(row=row, column=2).font = Font(bold=True, size=14, color="2F5496", name="맑은 고딕")
-
-    # Error notice
-    if tiktok_data.get("error"):
-        ws["A6"] = f"오류: {tiktok_data['error']}"
-        ws["A6"].font = Font(color="FF0000", size=10, name="맑은 고딕")
-
-    # Trending videos
-    videos = tiktok_data.get("trending_videos", [])
-    if videos:
-        row = 8
-        ws.cell(row=row, column=1).value = "인기 동영상"
-        ws.cell(row=row, column=1).font = Font(bold=True, size=11, name="맑은 고딕")
-        _style_header_cell(ws.cell(row=row + 1, column=1), "URL", "4472C4")
-        _style_header_cell(ws.cell(row=row + 1, column=2), "내용", "4472C4")
-        for i, v in enumerate(videos[:20]):
-            r = row + 2 + i
-            bg = COLOR_ROW_ALT if i % 2 == 0 else None
-            _style_data_cell(ws.cell(row=r, column=1), v.get("url", ""), bg, align="left")
-            _style_data_cell(ws.cell(row=r, column=2), v.get("text", "")[:100], bg, align="left")
-
-    ws.column_dimensions["A"].width = 25
-    ws.column_dimensions["B"].width = 60
-
 
 def _create_platform_sheet(wb: openpyxl.Workbook, data: dict, sheet_name: str):
     """Generic sheet for Qoo10 / Olive Young."""
@@ -332,23 +288,6 @@ def _create_summary_sheet(wb: openpyxl.Workbook, all_data: dict, report_date: st
             ws.cell(row=r, column=2).font = Font(size=10, name="맑은 고딕")
             r += 1
 
-    # TikTok
-    col = 5
-    tiktok = all_data.get("tiktok", {})
-    _style_header_cell(ws.cell(row=row, column=col), "TikTok #medicube", COLOR_SUBHEADER_BG)
-    ws.merge_cells(f"{get_column_letter(col)}{row}:{get_column_letter(col+2)}{row}")
-    tiktok_labels = [
-        ("총 조회수", tiktok.get("total_views")),
-        ("총 게시물", tiktok.get("total_posts")),
-    ]
-    for i, (label, val) in enumerate(tiktok_labels):
-        r = row + 1 + i
-        ws.cell(row=r, column=col).value = label
-        ws.cell(row=r, column=col).font = Font(size=10, name="맑은 고딕")
-        display = f"{val:,}" if isinstance(val, int) else "수집 중..."
-        ws.cell(row=r, column=col + 1).value = display
-        ws.cell(row=r, column=col + 1).font = Font(bold=True, size=12, color="2F5496", name="맑은 고딕")
-
     # Amazon summary
     amazon_row = row + max(len(by_region) + 3 if by_region else 3, 5)
     _style_header_cell(ws.cell(row=amazon_row, column=1), "Amazon 뷰티 Top 100 (Medicube 제품 수)", COLOR_SUBHEADER_BG)
@@ -411,9 +350,6 @@ def export_daily_report(all_data: dict, output_path: str = None) -> str:
 
     if "google_trends" in all_data and not all_data["google_trends"].get("error"):
         _create_google_trends_sheet(wb, all_data["google_trends"])
-
-    if "tiktok" in all_data:
-        _create_tiktok_sheet(wb, all_data["tiktok"])
 
     if "qoo10" in all_data and not all_data["qoo10"].get("error"):
         _create_platform_sheet(wb, all_data["qoo10"], "Qoo10 Japan")

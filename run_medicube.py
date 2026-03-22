@@ -68,14 +68,12 @@ class MedicubeTrackerApp:
 
         self._sources = {
             "google": tk.BooleanVar(value=True),
-            "tiktok": tk.BooleanVar(value=True),
             "amazon": tk.BooleanVar(value=True),
             "qoo10": tk.BooleanVar(value=True),
             "oliveyoung": tk.BooleanVar(value=True),
         }
         source_labels = {
             "google": "📈 Google Trends",
-            "tiktok": "🎵 TikTok (Exolyt)",
             "amazon": "🛒 Amazon 국가별",
             "qoo10": "🛍️ Qoo10 Japan",
             "oliveyoung": "🌿 Olive Young Global",
@@ -90,18 +88,6 @@ class MedicubeTrackerApp:
                 activeforeground="white", cursor="hand2"
             )
             cb.grid(row=0, column=i, padx=12, pady=4, sticky="w")
-
-        # TikTok headless option
-        tiktok_opts = tk.Frame(sources_frame, bg="#2A4A7F")
-        tiktok_opts.pack(fill="x", padx=5)
-        self._headless_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            tiktok_opts, text="TikTok: 브라우저 숨김(헤드리스) 모드  ※ 로그인 실패 시 체크 해제",
-            variable=self._headless_var,
-            font=("맑은 고딕", 9), fg="#AEC6E8", bg="#2A4A7F",
-            selectcolor="#1F3864", activebackground="#2A4A7F",
-            activeforeground="white"
-        ).pack(side="left", padx=5)
 
         # Progress bar
         prog_frame = tk.Frame(self.root, bg="#1F3864")
@@ -179,7 +165,6 @@ class MedicubeTrackerApp:
 
         result_items = [
             ("google", "Google Trends", "—"),
-            ("tiktok", "TikTok 조회수", "—"),
             ("amazon", "Amazon Medicube", "—"),
             ("qoo10", "Qoo10 Medicube", "—"),
             ("oliveyoung", "OliveYoung Medicube", "—"),
@@ -309,25 +294,6 @@ class MedicubeTrackerApp:
                     self._log_callback(f"[Google Trends] 오류: {e}")
                     self._results["google_trends"] = {"error": str(e)}
                     self._update_result_label("google", "오류")
-                step += 1
-
-            # ── TikTok ────────────────────────────────────────────────────
-            if "tiktok" in selected and self._running:
-                self._update_status("TikTok 트렌드 수집 중...", (step / total_steps) * 90)
-                try:
-                    from medicube_tracker.tiktok_tracker import fetch_tiktok_trends
-                    tiktok = fetch_tiktok_trends(
-                        log_callback=self._log_callback,
-                        headless=self._headless_var.get()
-                    )
-                    self._results["tiktok"] = tiktok
-                    views = tiktok.get("total_views")
-                    disp = f"{views:,}" if isinstance(views, int) else "N/A"
-                    self._update_result_label("tiktok", disp)
-                except Exception as e:
-                    self._log_callback(f"[TikTok] 오류: {e}")
-                    self._results["tiktok"] = {"error": str(e), "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-                    self._update_result_label("tiktok", "오류")
                 step += 1
 
             # ── Amazon ────────────────────────────────────────────────────
