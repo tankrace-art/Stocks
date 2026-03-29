@@ -623,6 +623,88 @@ def _create_amazon_rank_history_sheet(
     ws.freeze_panes = "B4"
 
 
+_AMAZON_COUNTRIES = ["미국", "영국", "독일", "스페인", "이탈리아", "프랑스"]
+_CUMULATIVE_FILENAME = "Medicube_누적_트래커.xlsx"
+_CUMULATIVE_COLS = _AMAZON_COUNTRIES + ["Qoo10", "올리브영", "총합계"]
+
+
+def update_cumulative_tracker(all_data: dict, run_date: str):
+    """
+    Maintain a single cumulative tracker file (Medicube_누적_트래커.xlsx).
+    Each run appends one row: date | Amazon countries | Qoo10 | OliveYoung | total.
+    Format mirrors the user's manual tracking sheet.
+    """
+    tracker_path = os.path.join(OUTPUT_DIR, _CUMULATIVE_FILENAME)
+
+    # ── Extract today's values ───────────────────────────────────────────
+    med_amazon = all_data.get("amazon", {}).get("summary", {}).get("medicube", {})
+    country_vals = [med_amazon.get(c, 0) for c in _AMAZON_COUNTRIES]
+    qoo10_val = all_data.get("qoo10", {}).get("medicube_count", 0) or 0
+    oy_val = all_data.get("oliveyoung", {}).get("medicube_count", 0) or 0
+    total_val = sum(country_vals) + qoo10_val + oy_val
+    new_row_values = country_vals + [qoo10_val, oy_val, total_val]
+
+    # ── Load or create workbook ──────────────────────────────────────────
+    if os.path.exists(tracker_path):
+        wb = openpyxl.load_workbook(tracker_path)
+        ws = wb.active
+        # Find next empty row (skip header rows)
+        next_row = ws.max_row + 1
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Medicube 트래커"
+
+        # ── Title row ────────────────────────────────────────────────
+        title = "Amazon 뷰티 Top 100 (Medicube 제품 수)"
+        ws.merge_cells(f"A1:{get_column_letter(len(_CUMULATIVE_COLS) + 1)}1")
+        title_cell = ws["A1"]
+        title_cell.value = title
+        title_cell.font = Font(bold=True, size=13, color="FFFFFF", name="맑은 고딕")
+        title_cell.fill = PatternFill("solid", fgColor=COLOR_HEADER_BG)
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 28
+
+        # ── Column header row ─────────────────────────────────────────
+        _style_header_cell(ws.cell(row=2, column=1), "날짜", "4472C4", size=10)
+        for col_idx, col_name in enumerate(_CUMULATIVE_COLS, 2):
+            _style_header_cell(ws.cell(row=2, column=col_idx), col_name, "4472C4", size=10)
+        ws.row_dimensions[2].height = 20
+
+        # Column widths
+        ws.column_dimensions["A"].width = 12
+        for col_idx in range(2, len(_CUMULATIVE_COLS) + 2):
+            ws.column_dimensions[get_column_letter(col_idx)].width = 10
+
+        ws.freeze_panes = "B3"
+        next_row = 3
+
+    # ── Write new data row ───────────────────────────────────────────────
+    # Date cell (YYYY.MM.DD format)
+    date_label = run_date.replace("-", ".")
+    date_cell = ws.cell(row=next_row, column=1)
+    date_cell.value = date_label
+    date_cell.font = Font(bold=True, size=10, name="맑은 고딕")
+    date_cell.fill = PatternFill("solid", fgColor=COLOR_ROW_ALT)
+    date_cell.alignment = Alignment(horizontal="center", vertical="center")
+    date_cell.border = _thin_border()
+
+    for col_idx, val in enumerate(new_row_values, 2):
+        cell = ws.cell(row=next_row, column=col_idx)
+        is_total = (col_idx == len(_CUMULATIVE_COLS) + 1)
+        bg = COLOR_MEDICUBE_BG if is_total else COLOR_ROW_ALT
+        fg = COLOR_MEDICUBE_FG if is_total else "000000"
+        cell.value = val
+        cell.font = Font(bold=is_total, size=10, color=fg, name="맑은 고딕")
+        cell.fill = PatternFill("solid", fgColor=bg)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = _thin_border()
+
+    ws.row_dimensions[next_row].height = 18
+    wb.save(tracker_path)
+    return tracker_path
+
+
 def export_daily_report(all_data: dict, output_path: str = None, history: dict = None) -> str:
     """
     Export all collected trend data to a formatted Excel file.
@@ -677,4 +759,8 @@ def export_daily_report(all_data: dict, output_path: str = None, history: dict =
             _create_amazon_rank_history_sheet(wb, history, amazon_hist_keys)
 
     wb.save(output_path)
+
+    # ── Update cumulative tracker ────────────────────────────────────────
+    update_cumulative_tracker(all_data, report_date)
+
     return output_path
