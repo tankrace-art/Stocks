@@ -63,13 +63,15 @@ def _load_fonts():
     paths = [
         "C:/Windows/Fonts/malgun.ttf",
         "C:/Windows/Fonts/NanumGothic.ttf",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
         "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
     ]
     bold_paths = [
         "C:/Windows/Fonts/malgunbd.ttf",
         "C:/Windows/Fonts/NanumGothicBold.ttf",
+        "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     ]
 
