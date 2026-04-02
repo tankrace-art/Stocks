@@ -15,9 +15,10 @@ import time
 import schedule
 from datetime import datetime
 
-from nuclear_news.scraper import fetch_all_news
+from nuclear_news.scraper import fetch_all_news, NUCLEAR_COMPANIES
 from nuclear_news.dashboard import format_dashboard
-from nuclear_news.telegram_bot import send_photo
+from nuclear_news.telegram_bot import send_photo, send_message
+from nuclear_news.translator import translate_to_korean
 
 
 def run_dashboard():
@@ -50,12 +51,56 @@ def run_dashboard():
             print(f"  Failed to send image {i+1}")
             success = False
 
+    # Send link summary message after images
+    print("  Sending link summary...")
+    link_msg = _build_link_message(all_news)
+    if link_msg:
+        send_message(link_msg, parse_mode="HTML")
+
     if success:
-        print("  Dashboard sent successfully! (2 images)")
+        print("  Dashboard sent successfully!")
     else:
         print(f"  Some images failed. Saved at: {image_paths}")
 
     return success
+
+
+COMPANY_KO = {
+    "OKLO": "오클로", "SMR": "뉴스케일파워", "LEU": "센트러스에너지",
+    "CCJ": "카메코", "UEC": "우라늄에너지", "NNE": "나노뉴클리어",
+}
+
+
+def _build_link_message(all_news: dict) -> str:
+    """Build a text message with clickable links for all material news."""
+    lines = []
+    lines.append("🔗 <b>뉴스 원문 링크</b>")
+    lines.append("")
+
+    has_any = False
+    for ticker, items in all_news.items():
+        if not items:
+            continue
+        has_any = True
+        company_ko = COMPANY_KO.get(ticker, ticker)
+        lines.append(f"<b>${ticker} {company_ko}</b>")
+        for item in items:
+            ko_title = translate_to_korean(item.title)
+            if len(ko_title) > 60:
+                ko_title = ko_title[:59] + "…"
+            tags = " ".join(f"#{t}" for t in item.tags) if item.tags else ""
+            if item.url and item.url.startswith("http"):
+                lines.append(f'  • <a href="{item.url}">{ko_title}</a>')
+            else:
+                lines.append(f"  • {ko_title}")
+            if tags:
+                lines.append(f"    {tags}")
+        lines.append("")
+
+    if not has_any:
+        return ""
+
+    return "\n".join(lines)
 
 
 def run_scheduler(hour: int = 6, minute: int = 0):
