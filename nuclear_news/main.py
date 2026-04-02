@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Nuclear News Dashboard - Main entry point.
-Generates a visual dashboard image and sends via Telegram.
+Generates 2 mobile-friendly dashboard images and sends via Telegram.
 
 Usage:
-    python -m nuclear_news.main          # Run once (send to Telegram)
-    python -m nuclear_news.main --preview  # Generate image only (no send)
-    python -m nuclear_news.main --cron   # Run with built-in scheduler (daily 6 AM)
+    python -m nuclear_news.main            # Run once (send to Telegram)
+    python -m nuclear_news.main --preview  # Generate images only (no send)
+    python -m nuclear_news.main --cron     # Built-in scheduler (daily 6 AM)
 """
 
 import argparse
@@ -21,31 +21,39 @@ from nuclear_news.telegram_bot import send_photo
 
 
 def run_dashboard():
-    """Fetch news, generate dashboard image, and send to Telegram."""
+    """Fetch news, generate dashboard images, and send to Telegram."""
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting nuclear news dashboard...")
 
-    print("  Fetching news from all sources...")
-    all_news = fetch_all_news(max_per_source=3)
+    print("  Fetching & scoring news from all sources...")
+    all_news = fetch_all_news(max_per_source=5)
 
     total_articles = sum(len(items) for items in all_news.values())
-    print(f"  Found {total_articles} articles across {len(all_news)} companies")
+    print(f"  Selected {total_articles} quality articles across {len(all_news)} companies")
 
-    print("  Generating dashboard image...")
-    image_path = format_dashboard(all_news)
+    print("  Generating mobile dashboard (2 images)...")
+    image_paths = format_dashboard(all_news)
 
     print("  Sending to Telegram...")
     now = datetime.now()
     day_ko = {"Monday": "월", "Tuesday": "화", "Wednesday": "수",
               "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"}
     dk = day_ko.get(now.strftime("%A"), "")
-    caption = f"☢️ 미국 원자력 뉴스 대시보드 · {now.strftime(f'%Y.%m.%d ({dk})')}"
 
-    success = send_photo(image_path, caption=caption)
+    success = True
+    captions = [
+        f"☢️ 미국 원자력 뉴스 (1/2) 차세대 원자로\n{now.strftime(f'%Y.%m.%d ({dk})')}",
+        f"☢️ 미국 원자력 뉴스 (2/2) 우라늄·핵연료\n{now.strftime(f'%Y.%m.%d ({dk})')}",
+    ]
+    for i, path in enumerate(image_paths):
+        caption = captions[i] if i < len(captions) else ""
+        if not send_photo(path, caption=caption):
+            print(f"  Failed to send image {i+1}")
+            success = False
 
     if success:
-        print("  Dashboard sent successfully!")
+        print("  Dashboard sent successfully! (2 images)")
     else:
-        print(f"  Failed to send. Image saved at: {image_path}")
+        print(f"  Some images failed. Saved at: {image_paths}")
 
     return success
 
@@ -59,7 +67,6 @@ def run_scheduler(hour: int = 6, minute: int = 0):
 
     schedule.every().day.at(time_str).do(run_dashboard)
 
-    # Also run once immediately on start
     print("Running initial dashboard...")
     run_dashboard()
 
@@ -70,30 +77,24 @@ def run_scheduler(hour: int = 6, minute: int = 0):
 
 def main():
     parser = argparse.ArgumentParser(description="US Nuclear Energy News Dashboard")
-    parser.add_argument(
-        "--cron", action="store_true",
-        help="Run with built-in scheduler (daily at configured time)",
-    )
-    parser.add_argument(
-        "--hour", type=int, default=6,
-        help="Hour to run daily (24h format, default: 6)",
-    )
-    parser.add_argument(
-        "--minute", type=int, default=0,
-        help="Minute to run daily (default: 0)",
-    )
-    parser.add_argument(
-        "--preview", action="store_true",
-        help="Generate dashboard image without sending to Telegram",
-    )
+    parser.add_argument("--cron", action="store_true",
+                        help="Run with built-in scheduler (daily)")
+    parser.add_argument("--hour", type=int, default=6,
+                        help="Hour to run daily (default: 6)")
+    parser.add_argument("--minute", type=int, default=0,
+                        help="Minute to run daily (default: 0)")
+    parser.add_argument("--preview", action="store_true",
+                        help="Generate images without sending to Telegram")
     args = parser.parse_args()
 
     if args.preview:
         print("Fetching news (preview mode)...")
-        all_news = fetch_all_news(max_per_source=3)
-        image_path = format_dashboard(all_news)
-        print(f"\nDashboard image saved: {image_path}")
-        print("Open this file to preview the dashboard.")
+        all_news = fetch_all_news(max_per_source=5)
+        image_paths = format_dashboard(all_news)
+        print(f"\nDashboard images saved:")
+        for p in image_paths:
+            print(f"  {p}")
+        print("Open these files to preview.")
         return
 
     if args.cron:

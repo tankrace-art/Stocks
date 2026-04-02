@@ -1,12 +1,13 @@
 """
 US Nuclear Energy Companies News Scraper
-Scrapes latest news for Oklo (OKLO), NuScale Power (SMR), Centrus Energy (LEU), etc.
+With reliability scoring and cross-source verification.
 """
 
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from urllib.parse import quote_plus
 
 
 @dataclass
@@ -16,34 +17,47 @@ class NewsItem:
     url: str
     published: str
     snippet: str
+    score: int = 0           # importance/reliability score (0-100)
+    verified: bool = False   # appeared in 2+ sources
+    tags: list = field(default_factory=list)  # e.g. ["공시", "실적", "계약"]
 
 
-# Target companies with ticker symbols and search keywords
+# ── Trusted source tiers ──
+TIER1_SOURCES = {
+    "Reuters", "Bloomberg", "CNBC", "AP News", "The Wall Street Journal",
+    "Financial Times", "Barron's", "MarketWatch", "Yahoo Finance",
+    "PR Newswire", "Business Wire", "GlobeNewswire", "SEC Filing",
+}
+TIER2_SOURCES = {
+    "Seeking Alpha", "Benzinga", "Investopedia", "TipRanks",
+    "GuruFocus.com", "Barchart", "Zacks", "InvestorPlace",
+    "The Motley Fool", "Exec Edge", "Nasdaq", "24/7 Wall St.",
+}
+SPAM_KEYWORDS = [
+    "short seller", "meme stock", "you won't believe",
+    "millionaire", "retire early", "get rich",
+]
+
+# ── News category tags (keyword → Korean tag) ──
+CATEGORY_KEYWORDS = {
+    "SEC": "공시", "filing": "공시", "report": "공시",
+    "earnings": "실적", "revenue": "실적", "profit": "실적", "quarterly": "실적",
+    "contract": "계약", "deal": "계약", "partnership": "제휴", "agreement": "계약",
+    "NRC": "규제", "license": "인허가", "permit": "인허가", "regulatory": "규제", "approval": "인허가",
+    "reactor": "원자로", "SMR": "SMR", "microreactor": "마이크로원자로",
+    "uranium": "우라늄", "enrichment": "농축", "fuel": "핵연료",
+    "price target": "목표가", "upgrade": "투자의견", "downgrade": "투자의견", "analyst": "애널리스트",
+    "construction": "건설", "deployment": "배치", "operation": "운영",
+    "DOE": "에너지부", "funding": "자금", "investment": "투자",
+}
+
 NUCLEAR_COMPANIES = {
-    "OKLO": {
-        "name": "Oklo Inc.",
-        "keywords": ["Oklo", "OKLO stock"],
-    },
-    "SMR": {
-        "name": "NuScale Power",
-        "keywords": ["NuScale Power", "SMR stock NuScale"],
-    },
-    "LEU": {
-        "name": "Centrus Energy",
-        "keywords": ["Centrus Energy", "LEU stock"],
-    },
-    "CCJ": {
-        "name": "Cameco Corp",
-        "keywords": ["Cameco", "CCJ stock"],
-    },
-    "UEC": {
-        "name": "Uranium Energy Corp",
-        "keywords": ["Uranium Energy Corp", "UEC stock"],
-    },
-    "NNE": {
-        "name": "Nano Nuclear Energy",
-        "keywords": ["Nano Nuclear Energy", "NNE stock"],
-    },
+    "OKLO": {"name": "Oklo Inc.", "keywords": ["Oklo", "OKLO stock"]},
+    "SMR": {"name": "NuScale Power", "keywords": ["NuScale Power", "SMR stock NuScale"]},
+    "LEU": {"name": "Centrus Energy", "keywords": ["Centrus Energy", "LEU stock"]},
+    "CCJ": {"name": "Cameco Corp", "keywords": ["Cameco", "CCJ stock"]},
+    "UEC": {"name": "Uranium Energy Corp", "keywords": ["Uranium Energy Corp", "UEC stock"]},
+    "NNE": {"name": "Nano Nuclear Energy", "keywords": ["Nano Nuclear Energy", "NNE stock"]},
 }
 
 HEADERS = {
@@ -55,18 +69,104 @@ HEADERS = {
 }
 
 
+def _score_news(item: NewsItem) -> int:
+    """Score a news item by reliability and importance (0-100)."""
+    score = 30  # base score
+
+    # Source tier scoring
+    if item.source in TIER1_SOURCES:
+        score += 30
+    elif item.source in TIER2_SOURCES:
+        score += 15
+    elif any(t1.lower() in item.source.lower() for t1 in TIER1_SOURCES):
+        score += 25
+    elif any(t2.lower() in item.source.lower() for t2 in TIER2_SOURCES):
+        score += 10
+
+    # Has snippet (more informative)
+    if item.snippet:
+        score += 10
+
+    # Recency bonus
+    if "Today" in item.published:
+        score += 15
+    elif _is_within_days(item.published, 2):
+        score += 10
+    elif _is_within_days(item.published, 7):
+        score += 5
+
+    # Important keyword bonus
+    title_lower = item.title.lower()
+    important_keywords = ["contract", "deal", "partnership", "license", "approval",
+                          "nrc", "doe", "earnings", "revenue", "sec filing",
+                          "construction", "deployment", "reactor"]
+    for kw in important_keywords:
+        if kw in title_lower:
+            score += 8
+            break
+
+    # Spam penalty
+    for spam in SPAM_KEYWORDS:
+        if spam in title_lower:
+            score -= 30
+            break
+
+    return max(0, min(100, score))
+
+
+def _tag_news(item: NewsItem) -> list[str]:
+    """Assign Korean category tags to a news item."""
+    tags = []
+    text = (item.title + " " + item.snippet).lower()
+    seen = set()
+    for keyword, tag in CATEGORY_KEYWORDS.items():
+        if keyword.lower() in text and tag not in seen:
+            tags.append(tag)
+            seen.add(tag)
+        if len(tags) >= 2:
+            break
+    return tags
+
+
+def _is_within_days(date_str: str, days: int) -> bool:
+    """Check if a date string is within N days of now."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+        return (datetime.now() - dt).days <= days
+    except ValueError:
+        return False
+
+
+def _cross_verify(all_items: list[NewsItem]) -> list[NewsItem]:
+    """Mark items as verified if similar titles appear from different sources."""
+    for i, item_a in enumerate(all_items):
+        for j, item_b in enumerate(all_items):
+            if i >= j:
+                continue
+            if item_a.source == item_b.source:
+                continue
+            # Simple similarity: check if 3+ words overlap
+            words_a = set(item_a.title.lower().split())
+            words_b = set(item_b.title.lower().split())
+            overlap = words_a & words_b
+            # Remove common stop words
+            stop = {"the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "is", "with"}
+            meaningful_overlap = overlap - stop
+            if len(meaningful_overlap) >= 3:
+                item_a.verified = True
+                item_b.verified = True
+    return all_items
+
+
 def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
     """Scrape Google News RSS feed for a given query."""
     items = []
     try:
-        # URL-encode the query for better compatibility
-        from urllib.parse import quote_plus
         encoded_query = quote_plus(query)
         rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
         resp = requests.get(rss_url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
 
-        # Try xml parser first, fall back to html.parser
         try:
             soup = BeautifulSoup(resp.content, "xml")
         except Exception:
@@ -85,7 +185,6 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
                 desc_soup = BeautifulSoup(description.text, "html.parser")
                 snippet = desc_soup.get_text(strip=True)[:200]
 
-            # Extract URL - Google News RSS puts URL as text after <link> tag
             news_url = ""
             if link:
                 if link.string:
@@ -153,13 +252,15 @@ def scrape_finviz_news(ticker: str, max_results: int = 5) -> list[NewsItem]:
     return items
 
 
-def fetch_all_news(max_per_source: int = 3) -> dict[str, list[NewsItem]]:
-    """Fetch news for all tracked nuclear companies."""
+def fetch_all_news(max_per_source: int = 5) -> dict[str, list[NewsItem]]:
+    """Fetch, score, verify, and filter news for all companies."""
     all_news = {}
+    all_items_flat = []  # for cross-verification
+
     for ticker, info in NUCLEAR_COMPANIES.items():
         company_news = []
 
-        # Google News RSS
+        # Google News RSS (fetch more for better filtering)
         for keyword in info["keywords"][:1]:
             google_items = scrape_google_news(keyword, max_results=max_per_source)
             company_news.extend(google_items)
@@ -168,7 +269,7 @@ def fetch_all_news(max_per_source: int = 3) -> dict[str, list[NewsItem]]:
         finviz_items = scrape_finviz_news(ticker, max_results=max_per_source)
         company_news.extend(finviz_items)
 
-        # Deduplicate by title similarity
+        # Deduplicate
         seen_titles = set()
         unique_news = []
         for item in company_news:
@@ -177,15 +278,32 @@ def fetch_all_news(max_per_source: int = 3) -> dict[str, list[NewsItem]]:
                 seen_titles.add(title_key)
                 unique_news.append(item)
 
-        # Prioritize items with snippets (more informative)
-        unique_news.sort(key=lambda x: (0 if x.snippet else 1))
-        all_news[ticker] = unique_news[:2]
+        # Score and tag each item
+        for item in unique_news:
+            item.score = _score_news(item)
+            item.tags = _tag_news(item)
+
+        all_items_flat.extend(unique_news)
+
+        # Sort by score (highest first), keep top 2
+        unique_news.sort(key=lambda x: x.score, reverse=True)
+
+        # Filter out low-quality news (score < 20)
+        quality_news = [n for n in unique_news if n.score >= 20]
+        all_news[ticker] = quality_news[:2]
+
+    # Cross-verify across all companies
+    _cross_verify(all_items_flat)
+
+    # Print verification summary
+    total = sum(len(v) for v in all_news.values())
+    verified = sum(1 for items in all_news.values() for i in items if i.verified)
+    print(f"  Quality filter: {total} articles selected, {verified} cross-verified")
 
     return all_news
 
 
 def _format_date(date_str: str) -> str:
-    """Format RSS date string to readable format."""
     try:
         dt = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %Z")
         return dt.strftime("%Y-%m-%d %H:%M")
