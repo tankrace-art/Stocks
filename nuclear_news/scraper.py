@@ -177,6 +177,8 @@ def fetch_all_news(max_per_source: int = 3) -> dict[str, list[NewsItem]]:
                 seen_titles.add(title_key)
                 unique_news.append(item)
 
+        # Prioritize items with snippets (more informative)
+        unique_news.sort(key=lambda x: (0 if x.snippet else 1))
         all_news[ticker] = unique_news[:2]
 
     return all_news

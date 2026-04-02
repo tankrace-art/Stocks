@@ -1,6 +1,6 @@
 """
-Nuclear News Image Dashboard - Generates a visual PNG dashboard for Telegram.
-Card-style layout inspired by financial indicator dashboards.
+Nuclear News Image Dashboard - Visual PNG dashboard for Telegram.
+Wide card layout with Korean summaries for readability.
 """
 
 import os
@@ -12,284 +12,312 @@ from nuclear_news.translator import translate_to_korean
 
 
 # ── Colors ──
-BG_COLOR = (255, 255, 255)
-HEADER_BG = (17, 24, 39)        # dark navy
+BG = (246, 248, 250)
+HEADER_BG = (17, 24, 39)
 HEADER_TEXT = (255, 255, 255)
-SECTION_BG = (241, 245, 249)    # light gray
-SECTION_TEXT = (30, 41, 59)
-CARD_BG = (255, 255, 255)
-CARD_BORDER = (203, 213, 225)   # slate-300
-TITLE_COLOR = (15, 23, 42)      # slate-900
-SUB_COLOR = (100, 116, 139)     # slate-500
-ACCENT_GREEN = (22, 163, 74)
-ACCENT_BLUE = (37, 99, 235)
-ACCENT_ORANGE = (234, 88, 12)
-BRIEFING_BG = (254, 252, 232)   # yellow-50
-BRIEFING_BORDER = (234, 179, 8) # yellow-500
-SECTOR1_ACCENT = (220, 38, 38)  # red for nuclear
-SECTOR2_ACCENT = (37, 99, 235)  # blue for uranium
+WHITE = (255, 255, 255)
+BORDER = (209, 213, 219)
+TITLE = (15, 23, 42)
+BODY = (51, 65, 85)
+SUB = (100, 116, 139)
+LIGHT_LINE = (226, 232, 240)
+BRIEFING_BG = (255, 251, 235)
+BRIEFING_BORDER = (245, 158, 11)
+RED = (220, 38, 38)
+BLUE = (37, 99, 235)
+ORANGE = (234, 88, 12)
+TAG_BG_RED = (254, 226, 226)
+TAG_BG_BLUE = (219, 234, 254)
 
 # ── Layout ──
-W = 1000  # image width
-PADDING = 30
-CARD_PAD = 16
-CARD_GAP = 14
-CARD_RADIUS = 10
+W = 1080
+PAD = 32
+CARD_PAD = 20
+RADIUS = 12
 
-# ── Korean mappings ──
-DAY_KO = {
-    "Monday": "월", "Tuesday": "화", "Wednesday": "수",
-    "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일",
-}
+# ── Korean ──
+DAY_KO = {"Monday": "월", "Tuesday": "화", "Wednesday": "수",
+           "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"}
 COMPANY_KO = {
     "OKLO": "오클로", "SMR": "뉴스케일파워", "LEU": "센트러스에너지",
     "CCJ": "카메코", "UEC": "우라늄에너지", "NNE": "나노뉴클리어",
 }
 SECTORS = [
-    {"name": "SMR · 차세대 원자로", "accent": SECTOR1_ACCENT, "tickers": ["OKLO", "SMR", "NNE"]},
-    {"name": "우라늄 · 핵연료", "accent": SECTOR2_ACCENT, "tickers": ["LEU", "CCJ", "UEC"]},
+    {"name": "차세대 원자로 (SMR)", "accent": RED, "tag_bg": TAG_BG_RED,
+     "tickers": ["OKLO", "SMR", "NNE"]},
+    {"name": "우라늄 · 핵연료", "accent": BLUE, "tag_bg": TAG_BG_BLUE,
+     "tickers": ["LEU", "CCJ", "UEC"]},
 ]
 
 
 def _load_fonts():
-    """Load fonts with fallback."""
-    # Try common Korean font paths
-    ko_font_paths = [
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",              # Linux (WenQuanYi)
-        "C:/Windows/Fonts/malgun.ttf",                                 # Windows (맑은 고딕)
-        "C:/Windows/Fonts/NanumGothic.ttf",                           # Windows (나눔고딕)
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",                 # macOS
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",            # Linux (Nanum)
+    paths = [
+        "C:/Windows/Fonts/malgun.ttf",
+        "C:/Windows/Fonts/malgunbd.ttf",
+        "C:/Windows/Fonts/NanumGothicBold.ttf",
+        "C:/Windows/Fonts/NanumGothic.ttf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
     ]
+    # Find bold and regular fonts
     font_path = None
-    for p in ko_font_paths:
+    for p in paths:
         if os.path.exists(p):
             font_path = p
             break
 
+    # Try to find bold variant
+    bold_path = font_path
+    bold_candidates = [
+        "C:/Windows/Fonts/malgunbd.ttf",
+        "C:/Windows/Fonts/NanumGothicBold.ttf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ]
+    for p in bold_candidates:
+        if os.path.exists(p):
+            bold_path = p
+            break
+
     if font_path:
         return {
-            "title_lg": ImageFont.truetype(font_path, 28),
-            "title_md": ImageFont.truetype(font_path, 22),
-            "title_sm": ImageFont.truetype(font_path, 18),
-            "body": ImageFont.truetype(font_path, 16),
-            "body_sm": ImageFont.truetype(font_path, 14),
-            "caption": ImageFont.truetype(font_path, 12),
+            "header": ImageFont.truetype(bold_path, 30),
+            "section": ImageFont.truetype(bold_path, 22),
+            "company": ImageFont.truetype(bold_path, 20),
+            "ticker": ImageFont.truetype(bold_path, 18),
+            "news_title": ImageFont.truetype(bold_path, 17),
+            "news_body": ImageFont.truetype(font_path, 15),
+            "caption": ImageFont.truetype(font_path, 14),
+            "date": ImageFont.truetype(font_path, 13),
         }
-    else:
-        # Fallback to default
-        return {k: ImageFont.load_default() for k in
-                ["title_lg", "title_md", "title_sm", "body", "body_sm", "caption"]}
+    return {k: ImageFont.load_default() for k in
+            ["header", "section", "company", "ticker", "news_title",
+             "news_body", "caption", "date"]}
 
 
-def _draw_rounded_rect(draw, xy, radius, fill=None, outline=None, width=1):
-    """Draw a rounded rectangle."""
-    x1, y1, x2, y2 = xy
-    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
-
-
-def _wrap_text(text, font, max_width, draw):
-    """Word-wrap text to fit within max_width pixels."""
-    lines = []
-    # For Korean text, wrap by character count estimation
-    avg_char_w = draw.textlength("가", font=font)
-    if avg_char_w == 0:
-        avg_char_w = 14
-    chars_per_line = max(1, int(max_width / avg_char_w))
-
-    for line in textwrap.wrap(text, width=chars_per_line):
-        lines.append(line)
+def _wrap(text, font, max_w, draw):
+    """Wrap Korean text to fit pixel width."""
+    if not text:
+        return [""]
+    char_w = draw.textlength("가나", font=font) / 2
+    if char_w == 0:
+        char_w = 15
+    cpl = max(1, int(max_w / char_w))
+    lines = textwrap.wrap(text, width=cpl)
     return lines if lines else [text]
 
 
 def format_dashboard(all_news: dict[str, list[NewsItem]]) -> str:
-    """Generate dashboard image and return the file path."""
+    """Generate dashboard image, return file path."""
     fonts = _load_fonts()
-
-    # ── First pass: calculate total height ──
-    y = 0
-    y += 80   # header
-    y += 10   # gap
-
-    # briefing
-    top_items = _pick_top_news(all_news, count=2)
-    y += 20   # padding
-    y += 30   # briefing title
-    y += len(top_items) * 50 + 20
-
-    # sectors
-    for sector in SECTORS:
-        y += 50  # sector header
-        for ticker in sector["tickers"]:
-            y += 20  # gap
-            y += 50  # company header in card
-            news_items = all_news.get(ticker, [])
-            if not news_items:
-                y += 40
-            else:
-                for item in news_items:
-                    y += 65  # each news item
-            y += CARD_PAD  # card bottom padding
-
-    y += 60  # footer
-    y += PADDING
-
-    H = max(y, 400)
-
-    # ── Create image ──
-    img = Image.new("RGB", (W, H), BG_COLOR)
-    draw = ImageDraw.Draw(img)
-    y = 0
-
-    # ═══════════════════════════════════════
-    # HEADER
-    # ═══════════════════════════════════════
-    draw.rectangle([(0, 0), (W, 80)], fill=HEADER_BG)
-
     now = datetime.now()
     day_ko = DAY_KO.get(now.strftime("%A"), "")
-    date_str = now.strftime(f"%Y.%m.%d ({day_ko})")
 
-    draw.text((PADDING, 16), "☢️  미국 원자력 핵심 뉴스 대시보드", fill=HEADER_TEXT, font=fonts["title_lg"])
-    draw.text((W - PADDING - draw.textlength(date_str, font=fonts["title_sm"]), 22),
-              date_str, fill=(148, 163, 184), font=fonts["title_sm"])
-    y = 80
+    # ── Translate all news upfront ──
+    translated = {}  # ticker -> list of (ko_title, ko_summary)
+    for ticker, items in all_news.items():
+        translated[ticker] = []
+        for item in items:
+            ko_title = translate_to_korean(item.title)
+            ko_summary = ""
+            if item.snippet:
+                ko_summary = translate_to_korean(item.snippet)
+            else:
+                # Create a brief context from the title
+                ko_summary = ko_title
+            translated[ticker].append((ko_title, ko_summary))
 
-    # ═══════════════════════════════════════
-    # TOP BRIEFING BOX
-    # ═══════════════════════════════════════
-    y += 14
+    # ── Two-pass rendering: measure then draw ──
+    # We'll render to a tall canvas, then crop
+    MAX_H = 3000
+    img = Image.new("RGB", (W, MAX_H), BG)
+    draw = ImageDraw.Draw(img)
+    content_w = W - 2 * PAD
+
+    y = 0
+
+    # ═══ HEADER ═══
+    header_h = 70
+    draw.rectangle([(0, 0), (W, header_h)], fill=HEADER_BG)
+    draw.text((PAD, 18), "☢  미국 원자력 핵심 뉴스 대시보드",
+              fill=HEADER_TEXT, font=fonts["header"])
+    date_text = now.strftime(f"%Y.%m.%d ({day_ko})")
+    dw = draw.textlength(date_text, font=fonts["ticker"])
+    draw.text((W - PAD - dw, 26), date_text, fill=(148, 163, 184), font=fonts["ticker"])
+    y = header_h + 16
+
+    # ═══ BRIEFING BOX ═══
+    top_items = _pick_top_news(all_news, count=3)
     if top_items:
-        briefing_h = 30 + len(top_items) * 50 + 10
-        _draw_rounded_rect(draw,
-                           (PADDING, y, W - PADDING, y + briefing_h),
-                           radius=8, fill=BRIEFING_BG, outline=BRIEFING_BORDER, width=2)
-
-        # Left accent bar
-        draw.rectangle([(PADDING, y + 4), (PADDING + 5, y + briefing_h - 4)],
-                       fill=BRIEFING_BORDER)
-
-        by = y + 12
-        draw.text((PADDING + 16, by), "⚡  오늘의 핵심 브리핑", fill=ACCENT_ORANGE, font=fonts["title_sm"])
-        by += 32
-
+        # Calculate briefing height
+        briefing_lines = []
         for ticker, item in top_items:
             ko_title = translate_to_korean(item.title)
-            ko_title = _truncate(ko_title, 60)
             company_ko = COMPANY_KO.get(ticker, ticker)
+            line = f"[{company_ko}] {ko_title}"
+            wrapped = _wrap(line, fonts["news_body"], content_w - 60, draw)
+            briefing_lines.append(wrapped)
 
-            draw.text((PADDING + 20, by), f"▸ [{company_ko}]", fill=TITLE_COLOR, font=fonts["body"])
-            tag_w = draw.textlength(f"▸ [{company_ko}] ", font=fonts["body"])
-            draw.text((PADDING + 20 + tag_w, by), ko_title, fill=SUB_COLOR, font=fonts["body"])
-            by += 44
+        total_lines = sum(len(wl) for wl in briefing_lines)
+        brief_h = 44 + total_lines * 22 + len(briefing_lines) * 8 + 8
 
-        y += briefing_h + 10
+        # Box
+        draw.rounded_rectangle(
+            [(PAD, y), (W - PAD, y + brief_h)],
+            radius=10, fill=BRIEFING_BG, outline=BRIEFING_BORDER, width=2)
+        # Left accent
+        draw.rectangle([(PAD + 1, y + 6), (PAD + 6, y + brief_h - 6)],
+                       fill=BRIEFING_BORDER)
 
-    # ═══════════════════════════════════════
-    # SECTOR SECTIONS
-    # ═══════════════════════════════════════
+        by = y + 14
+        draw.text((PAD + 18, by), "⚡ 오늘의 핵심 브리핑",
+                  fill=ORANGE, font=fonts["section"])
+        by += 34
+
+        for wl in briefing_lines:
+            draw.text((PAD + 22, by), "▸", fill=ORANGE, font=fonts["news_body"])
+            for i, line in enumerate(wl):
+                x_off = PAD + 38 if i == 0 else PAD + 38
+                draw.text((x_off, by), line, fill=BODY, font=fonts["news_body"])
+                by += 22
+            by += 8
+
+        y += brief_h + 18
+
+    # ═══ SECTORS ═══
     for sector in SECTORS:
-        y += 10
+        # Section header
+        draw.rounded_rectangle(
+            [(PAD, y), (W - PAD, y + 40)],
+            radius=8, fill=sector["accent"])
+        draw.text((PAD + 16, y + 8), f"  {sector['name']}",
+                  fill=WHITE, font=fonts["section"])
+        y += 52
 
-        # Sector header bar
-        draw.rectangle([(PADDING, y), (W - PADDING, y + 38)], fill=SECTION_BG)
-        draw.rectangle([(PADDING, y), (PADDING + 5, y + 38)], fill=sector["accent"])
-        draw.text((PADDING + 16, y + 8), f"  {sector['name']}", fill=SECTION_TEXT, font=fonts["title_sm"])
-        y += 48
-
-        # Company cards (side by side if possible, else stacked)
-        tickers = sector["tickers"]
-        card_w = (W - 2 * PADDING - (len(tickers) - 1) * CARD_GAP) // len(tickers)
-
-        # Calculate max card height for this sector
-        card_heights = []
-        for ticker in tickers:
-            news_items = all_news.get(ticker, [])
-            ch = 50  # header
-            if not news_items:
-                ch += 35
-            else:
-                ch += len(news_items) * 65
-            ch += CARD_PAD
-            card_heights.append(ch)
-        max_card_h = max(card_heights)
-
-        # Draw cards side by side
-        for i, ticker in enumerate(tickers):
-            cx = PADDING + i * (card_w + CARD_GAP)
-            news_items = all_news.get(ticker, [])
+        # Company cards - 1 per row, full width for readability
+        for ticker in sector["tickers"]:
+            items = all_news.get(ticker, [])
+            trans = translated.get(ticker, [])
             company_ko = COMPANY_KO.get(ticker, "")
             company_en = NUCLEAR_COMPANIES[ticker]["name"]
 
-            # Card background
-            _draw_rounded_rect(draw,
-                               (cx, y, cx + card_w, y + max_card_h),
-                               radius=CARD_RADIUS, fill=CARD_BG,
-                               outline=CARD_BORDER, width=1)
+            # Calculate card height
+            card_content_h = 0
+            news_blocks = []
+            for idx, item in enumerate(items):
+                ko_title = trans[idx][0] if idx < len(trans) else item.title
+                ko_summary = trans[idx][1] if idx < len(trans) else ""
 
-            # Top accent line
-            draw.rectangle([(cx + 1, y + 1), (cx + card_w - 1, y + 4)],
-                           fill=sector["accent"])
+                title_lines = _wrap(ko_title, fonts["news_title"], content_w - 80, draw)
+                summary_lines = []
+                if ko_summary and ko_summary != ko_title:
+                    summary_text = _truncate(ko_summary, 120)
+                    summary_lines = _wrap(summary_text, fonts["news_body"], content_w - 80, draw)
+                    summary_lines = summary_lines[:2]  # max 2 lines
+
+                block_h = len(title_lines) * 24 + len(summary_lines) * 20 + 22 + 12
+                card_content_h += block_h
+                news_blocks.append((item, ko_title, title_lines, summary_lines, block_h))
+
+            if not items:
+                card_content_h = 36
+
+            card_h = 56 + card_content_h + 8  # header + content + padding
+            card_x = PAD
+            card_w = content_w
+
+            # Card background
+            draw.rounded_rectangle(
+                [(card_x, y), (card_x + card_w, y + card_h)],
+                radius=RADIUS, fill=WHITE, outline=BORDER, width=1)
+
+            # Top accent stripe
+            draw.rectangle(
+                [(card_x + 1, y + 1), (card_x + card_w - 1, y + 5)],
+                fill=sector["accent"])
+
+            # Company header
+            cy = y + 12
+            # Ticker tag
+            tag_text = f" ${ticker} "
+            tw = draw.textlength(tag_text, font=fonts["ticker"])
+            draw.rounded_rectangle(
+                [(card_x + CARD_PAD, cy - 2), (card_x + CARD_PAD + tw + 8, cy + 22)],
+                radius=4, fill=sector["tag_bg"])
+            draw.text((card_x + CARD_PAD + 4, cy), tag_text,
+                      fill=sector["accent"], font=fonts["ticker"])
 
             # Company name
-            cy = y + 10
-            draw.text((cx + CARD_PAD, cy), f"${ticker}", fill=sector["accent"], font=fonts["title_sm"])
-            ticker_w = draw.textlength(f"${ticker} ", font=fonts["title_sm"])
-            draw.text((cx + CARD_PAD + ticker_w, cy + 2), company_ko, fill=TITLE_COLOR, font=fonts["body"])
-            cy += 24
-            draw.text((cx + CARD_PAD, cy), company_en, fill=SUB_COLOR, font=fonts["body_sm"])
-            cy += 22
+            draw.text((card_x + CARD_PAD + tw + 18, cy),
+                      f"{company_ko}  {company_en}",
+                      fill=TITLE, font=fonts["company"])
+            cy += 32
 
             # Divider
-            draw.line([(cx + CARD_PAD, cy), (cx + card_w - CARD_PAD, cy)],
-                      fill=CARD_BORDER, width=1)
-            cy += 8
+            draw.line([(card_x + CARD_PAD, cy), (card_x + card_w - CARD_PAD, cy)],
+                      fill=LIGHT_LINE, width=1)
+            cy += 12
 
             # News items
-            if not news_items:
-                draw.text((cx + CARD_PAD, cy + 4), "최근 뉴스 없음", fill=SUB_COLOR, font=fonts["body_sm"])
+            if not news_blocks:
+                draw.text((card_x + CARD_PAD, cy + 4), "  최근 뉴스 없음",
+                          fill=SUB, font=fonts["news_body"])
             else:
-                for item in news_items:
-                    ko_title = translate_to_korean(item.title)
-                    max_title_chars = max(1, (card_w - 2 * CARD_PAD) // 14)
-                    ko_title = _truncate(ko_title, max_title_chars)
+                for bi, (item, ko_title, title_lines, summary_lines, bh) in enumerate(news_blocks):
                     date = _short_date(item.published)
-                    source = item.source if item.source else ""
+                    source = item.source or ""
 
-                    draw.text((cx + CARD_PAD, cy), "📰", fill=TITLE_COLOR, font=fonts["body_sm"])
-                    draw.text((cx + CARD_PAD + 20, cy), ko_title, fill=TITLE_COLOR, font=fonts["body_sm"])
+                    # Date/source tag
+                    tag = f"{source} · {date}" if source else date
+                    draw.text((card_x + CARD_PAD + 4, cy), tag,
+                              fill=SUB, font=fonts["date"])
                     cy += 20
-                    draw.text((cx + CARD_PAD + 20, cy), f"{source} · {date}",
-                              fill=SUB_COLOR, font=fonts["caption"])
-                    cy += 24
 
-                    # Small divider between news items
-                    if item != news_items[-1]:
-                        draw.line([(cx + CARD_PAD + 20, cy - 4), (cx + card_w - CARD_PAD, cy - 4)],
-                                  fill=(226, 232, 240), width=1)
+                    # Title (bold)
+                    for line in title_lines:
+                        draw.text((card_x + CARD_PAD + 4, cy), line,
+                                  fill=TITLE, font=fonts["news_title"])
+                        cy += 24
 
-        y += max_card_h + CARD_GAP
+                    # Summary (lighter, smaller)
+                    for line in summary_lines:
+                        draw.text((card_x + CARD_PAD + 4, cy), line,
+                                  fill=SUB, font=fonts["news_body"])
+                        cy += 20
 
-    # ═══════════════════════════════════════
-    # FOOTER
-    # ═══════════════════════════════════════
-    y += 6
-    draw.line([(PADDING, y), (W - PADDING, y)], fill=CARD_BORDER, width=1)
-    y += 10
-    footer = f"📋 출처: Finviz, Google News  |  🤖 자동 생성 · {now.strftime('%H:%M')}"
-    draw.text((PADDING, y), footer, fill=SUB_COLOR, font=fonts["body_sm"])
+                    cy += 6
 
-    # ── Save ──
+                    # Divider between news
+                    if bi < len(news_blocks) - 1:
+                        draw.line(
+                            [(card_x + CARD_PAD + 4, cy),
+                             (card_x + card_w - CARD_PAD, cy)],
+                            fill=LIGHT_LINE, width=1)
+                        cy += 8
+
+            y += card_h + 12
+
+        y += 8
+
+    # ═══ FOOTER ═══
+    y += 4
+    draw.line([(PAD, y), (W - PAD, y)], fill=BORDER, width=1)
+    y += 12
+    footer = f"출처: Finviz · Google News   |   자동 생성 {now.strftime('%H:%M')}"
+    draw.text((PAD, y), footer, fill=SUB, font=fonts["caption"])
+    y += 30
+
+    # ── Crop and save ──
+    img = img.crop((0, 0, W, y))
     output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, f"dashboard_{now.strftime('%Y%m%d_%H%M')}.png")
     img.save(filepath, "PNG", quality=95)
     print(f"  Dashboard image saved: {filepath}")
-
     return filepath
 
 
-def _pick_top_news(all_news, count=2):
+def _pick_top_news(all_news, count=3):
     all_items = []
     for ticker, items in all_news.items():
         for item in items:
@@ -297,10 +325,9 @@ def _pick_top_news(all_news, count=2):
 
     def sort_key(pair):
         _, item = pair
-        pub = item.published
-        if "Today" in pub:
+        if "Today" in item.published:
             return "9999"
-        return pub
+        return item.published
 
     all_items.sort(key=sort_key, reverse=True)
     return all_items[:count]
