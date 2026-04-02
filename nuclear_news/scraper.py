@@ -59,7 +59,10 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
     """Scrape Google News RSS feed for a given query."""
     items = []
     try:
-        rss_url = f"https://news.google.com/rss/search?q={query}+when:2d&hl=en-US&gl=US&ceid=US:en"
+        # URL-encode the query for better compatibility
+        from urllib.parse import quote_plus
+        encoded_query = quote_plus(query)
+        rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
         resp = requests.get(rss_url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
 
@@ -88,15 +91,7 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
                 )
             )
     except Exception as e:
-        items.append(
-            NewsItem(
-                title=f"[Error fetching news for '{query}']",
-                source="Error",
-                url="",
-                published=datetime.now().strftime("%Y-%m-%d"),
-                snippet=str(e)[:200],
-            )
-        )
+        print(f"  [WARN] Google News fetch failed for '{query}': {type(e).__name__}")
     return items
 
 
@@ -142,15 +137,7 @@ def scrape_finviz_news(ticker: str, max_results: int = 5) -> list[NewsItem]:
                     )
                 )
     except Exception as e:
-        items.append(
-            NewsItem(
-                title=f"[Error fetching Finviz news for {ticker}]",
-                source="Error",
-                url="",
-                published=datetime.now().strftime("%Y-%m-%d"),
-                snippet=str(e)[:200],
-            )
-        )
+        print(f"  [WARN] Finviz fetch failed for '{ticker}': {type(e).__name__}")
     return items
 
 
