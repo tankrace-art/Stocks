@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Nuclear News Dashboard - Main entry point.
-Fetches news, formats dashboard, and sends via Telegram.
+Generates a visual dashboard image and sends via Telegram.
 
 Usage:
-    python -m nuclear_news.main          # Run once
-    python -m nuclear_news.main --cron   # Run with built-in scheduler (daily 6 AM KST)
+    python -m nuclear_news.main          # Run once (send to Telegram)
+    python -m nuclear_news.main --preview  # Generate image only (no send)
+    python -m nuclear_news.main --cron   # Run with built-in scheduler (daily 6 AM)
 """
 
 import argparse
@@ -16,11 +17,11 @@ from datetime import datetime
 
 from nuclear_news.scraper import fetch_all_news
 from nuclear_news.dashboard import format_dashboard
-from nuclear_news.telegram_bot import send_message
+from nuclear_news.telegram_bot import send_photo
 
 
 def run_dashboard():
-    """Fetch news, format dashboard, and send to Telegram."""
+    """Fetch news, generate dashboard image, and send to Telegram."""
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting nuclear news dashboard...")
 
     print("  Fetching news from all sources...")
@@ -29,23 +30,22 @@ def run_dashboard():
     total_articles = sum(len(items) for items in all_news.values())
     print(f"  Found {total_articles} articles across {len(all_news)} companies")
 
-    print("  Formatting dashboard...")
-    message = format_dashboard(all_news)
+    print("  Generating dashboard image...")
+    image_path = format_dashboard(all_news)
 
     print("  Sending to Telegram...")
-    success = send_message(message)
+    now = datetime.now()
+    day_ko = {"Monday": "월", "Tuesday": "화", "Wednesday": "수",
+              "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"}
+    dk = day_ko.get(now.strftime("%A"), "")
+    caption = f"☢️ 미국 원자력 뉴스 대시보드 · {now.strftime(f'%Y.%m.%d ({dk})')}"
+
+    success = send_photo(image_path, caption=caption)
 
     if success:
         print("  Dashboard sent successfully!")
     else:
-        print("  Failed to send dashboard. Check your .env configuration.")
-        # Also print to console for debugging
-        print("\n--- Dashboard Preview ---")
-        # Strip HTML tags for console preview
-        import re
-        preview = re.sub(r"<[^>]+>", "", message)
-        print(preview)
-        print("--- End Preview ---\n")
+        print(f"  Failed to send. Image saved at: {image_path}")
 
     return success
 
@@ -71,36 +71,29 @@ def run_scheduler(hour: int = 6, minute: int = 0):
 def main():
     parser = argparse.ArgumentParser(description="US Nuclear Energy News Dashboard")
     parser.add_argument(
-        "--cron",
-        action="store_true",
+        "--cron", action="store_true",
         help="Run with built-in scheduler (daily at configured time)",
     )
     parser.add_argument(
-        "--hour",
-        type=int,
-        default=6,
+        "--hour", type=int, default=6,
         help="Hour to run daily (24h format, default: 6)",
     )
     parser.add_argument(
-        "--minute",
-        type=int,
-        default=0,
+        "--minute", type=int, default=0,
         help="Minute to run daily (default: 0)",
     )
     parser.add_argument(
-        "--preview",
-        action="store_true",
-        help="Preview dashboard in console without sending to Telegram",
+        "--preview", action="store_true",
+        help="Generate dashboard image without sending to Telegram",
     )
     args = parser.parse_args()
 
     if args.preview:
         print("Fetching news (preview mode)...")
         all_news = fetch_all_news(max_per_source=3)
-        message = format_dashboard(all_news)
-        import re
-        preview = re.sub(r"<[^>]+>", "", message)
-        print(preview)
+        image_path = format_dashboard(all_news)
+        print(f"\nDashboard image saved: {image_path}")
+        print("Open this file to preview the dashboard.")
         return
 
     if args.cron:

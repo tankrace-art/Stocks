@@ -1,5 +1,5 @@
 """
-Telegram Bot module for sending nuclear news dashboard messages.
+Telegram Bot module for sending nuclear news dashboard as image.
 """
 
 import requests
@@ -13,13 +13,42 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
 
-def send_message(text: str, parse_mode: str = "HTML") -> bool:
-    """Send a message via Telegram Bot API. Splits long messages if needed."""
+def send_photo(image_path: str, caption: str = "") -> bool:
+    """Send a photo via Telegram Bot API."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("[ERROR] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in .env")
         return False
 
-    # Telegram message limit is 4096 characters
+    try:
+        with open(image_path, "rb") as photo:
+            payload = {
+                "chat_id": TELEGRAM_CHAT_ID,
+            }
+            if caption:
+                payload["caption"] = caption[:1024]
+                payload["parse_mode"] = "HTML"
+            resp = requests.post(
+                f"{TELEGRAM_API_URL}/sendPhoto",
+                data=payload,
+                files={"photo": photo},
+                timeout=60,
+            )
+        if resp.status_code != 200:
+            print(f"[ERROR] Telegram API error: {resp.status_code} - {resp.text}")
+            return False
+        print(f"[OK] Dashboard image sent successfully")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to send Telegram photo: {e}")
+        return False
+
+
+def send_message(text: str, parse_mode: str = "HTML") -> bool:
+    """Send a text message via Telegram Bot API (fallback)."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[ERROR] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in .env")
+        return False
+
     max_len = 4000
     chunks = _split_message(text, max_len) if len(text) > max_len else [text]
 
@@ -50,7 +79,6 @@ def send_message(text: str, parse_mode: str = "HTML") -> bool:
 
 
 def _split_message(text: str, max_len: int) -> list[str]:
-    """Split a long message into chunks at line boundaries."""
     chunks = []
     current = ""
     for line in text.split("\n"):
