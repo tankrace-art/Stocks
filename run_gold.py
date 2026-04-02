@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from krx_gold.scraper import (
     get_gold_daily,
     get_gold_price_history,
+    get_gold_intl,
     _latest_biz_day,
 )
 
@@ -68,6 +69,10 @@ class KrxGoldApp:
             mode_frame, text="종목별 기간 시세 추이", variable=self.mode_var,
             value="history", command=self._on_mode_change,
         ).grid(row=0, column=1, padx=15)
+        ttk.Radiobutton(
+            mode_frame, text="국제금시세 동향", variable=self.mode_var,
+            value="intl", command=self._on_mode_change,
+        ).grid(row=0, column=2, padx=15)
 
         # ── 입력 영역 ──
         input_frame = ttk.LabelFrame(self.root, text=" 조회 조건 ", padding=15)
@@ -187,9 +192,14 @@ class KrxGoldApp:
             self.item_combo.config(state="disabled")
             self.start_entry.config(state="disabled")
             self.end_entry.config(state="disabled")
-        else:
+        elif mode == "history":
             self.date_entry.config(state="disabled")
             self.item_combo.config(state="readonly")
+            self.start_entry.config(state="normal")
+            self.end_entry.config(state="normal")
+        else:  # intl
+            self.date_entry.config(state="disabled")
+            self.item_combo.config(state="disabled")
             self.start_entry.config(state="normal")
             self.end_entry.config(state="normal")
 
@@ -249,7 +259,7 @@ class KrxGoldApp:
                 self._log(f"[KRX 금시장] {trd_dd} 전종목 시세 조회 중...")
                 self._log("")
 
-                df = get_gold_daily(trd_dd)
+                df = get_gold_daily(trd_dd, log_fn=self._log)
                 self.last_df = df
 
                 if df.empty:
@@ -261,17 +271,14 @@ class KrxGoldApp:
                     self._log("")
                     self._log(df.to_string(index=False))
 
-            else:  # history
+            elif mode == "history":
                 start = self.start_var.get().strip()
                 end = self.end_var.get().strip()
                 item_name = self.item_var.get()
                 isu_cd = GOLD_ITEMS[item_name]
 
                 self._log(f"[KRX 금시장] {item_name} 시세 추이 조회 중...")
-                self._log(f"  기간: {start} ~ {end}")
-                self._log("")
-
-                df = get_gold_price_history(start, end, isu_cd)
+                df = get_gold_price_history(start, end, isu_cd, log_fn=self._log)
                 self.last_df = df
 
                 if df.empty:
@@ -280,9 +287,25 @@ class KrxGoldApp:
                     self._log(f"총 {len(df)}일 데이터 조회 완료")
                     self._log("")
                     self._log(df.to_string(index=False))
-
-                    # 통계
                     self._show_stats(df, item_name)
+
+            else:  # intl (국제금시세)
+                start = self.start_var.get().strip()
+                end = self.end_var.get().strip()
+
+                self._log(f"[KRX 금시장] 국제금시세 동향 조회 중...")
+                self._log(f"  기간: {start} ~ {end}")
+                self._log("")
+
+                df = get_gold_intl(start, end, log_fn=self._log)
+                self.last_df = df
+
+                if df.empty:
+                    self._log("데이터가 없습니다.")
+                else:
+                    self._log(f"총 {len(df)}건 조회 완료")
+                    self._log("")
+                    self._log(df.to_string(index=False))
 
         except Exception as e:
             self._log(f"\n[오류] {type(e).__name__}: {e}")

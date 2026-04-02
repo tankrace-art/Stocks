@@ -2,6 +2,10 @@
 
 data.krx.co.kr 에서 금 현물 일별 시세(가격, 거래량 등)를 가져온다.
 
+두 가지 데이터 소스 지원:
+1. data.krx.co.kr 내부 API (회원가입 불필요)
+2. KRX Open API (openapi.krx.co.kr, API 키 필요)
+
 사용 방법:
     from krx_gold.scraper import get_gold_daily, get_gold_price_history
 
@@ -11,11 +15,14 @@ data.krx.co.kr 에서 금 현물 일별 시세(가격, 거래량 등)를 가져�
     # 금 1kg 기간별 시세
     df = get_gold_price_history("20250101", "20250401")
 
-참고:
-    KRX data.krx.co.kr 내부 API를 사용합니다.
-    - JSON API: POST /comm/bldAttendant/getJsonData.cmd (bld 파라미터)
-    - CSV 다운로드: GenerateOTP → download_csv 2단계
-    bld 경로가 변경될 경우 브라우저 개발자도구 Network 탭에서 확인 후 수정하세요.
+    # KRX Open API 사용 (API 키 필요)
+    df = get_gold_open_api("20250401", api_key="YOUR_KEY")
+
+bld 경로 참고:
+    pykrx path_bld_information.json 기준:
+    - 금 전종목 시세: MDCSTAT14901 (menuId: MDC0201060201)
+    - 금 개별종목 시세 추이: MDCSTAT15001 (menuId: MDC0201060202)
+    - 국제금시세 동향: MDCSTAT13901 (menuId: MDC0201060207)
 """
 
 import time
@@ -25,7 +32,7 @@ from datetime import datetime, timedelta
 import requests
 import pandas as pd
 
-# ── KRX 엔드포인트 ──
+# ── KRX data.krx.co.kr 엔드포인트 ──
 BASE = "http://data.krx.co.kr"
 JSON_URL = f"{BASE}/comm/bldAttendant/getJsonData.cmd"
 OTP_URL = f"{BASE}/comm/fileDn/GenerateOTP/generate.cmd"
@@ -43,22 +50,13 @@ HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
 }
 
-# ── KRX 금시장 bld 경로 후보 ──
-# data.krx.co.kr의 금시장 메뉴 ID: MDC0201060201 (전종목 시세)
-# bld 경로는 KRX 내부적으로 변경될 수 있으므로 여러 후보를 시도한다.
-BLD_GOLD_DAILY_CANDIDATES = [
-    "dbms/MDC/STAT/standard/MDCSTAT06601",  # 금 전종목 시세
-    "dbms/MDC/STAT/standard/MDCSTAT06701",
-    "dbms/MDC/STAT/standard/MDCSTAT06001",
-    "dbms/MDC/STAT/standard/MDCSTAT06101",
-]
+# ── KRX 금시장 bld 경로 (pykrx path_bld_information.json 기준) ──
+BLD_GOLD_DAILY = "dbms/MDC/STAT/standard/MDCSTAT14901"     # 금 전종목 시세
+BLD_GOLD_HISTORY = "dbms/MDC/STAT/standard/MDCSTAT15001"   # 금 개별종목 시세 추이
+BLD_GOLD_INTL = "dbms/MDC/STAT/standard/MDCSTAT13901"      # 국제금시세 동향
 
-BLD_GOLD_HISTORY_CANDIDATES = [
-    "dbms/MDC/STAT/standard/MDCSTAT06602",  # 금 종목별 시세 추이
-    "dbms/MDC/STAT/standard/MDCSTAT06702",
-    "dbms/MDC/STAT/standard/MDCSTAT06002",
-    "dbms/MDC/STAT/standard/MDCSTAT06102",
-]
+# ── KRX Open API (공식 API, API 키 필요) ──
+KRX_OPEN_API_GOLD = "https://data-dbg.krx.co.kr/svc/apis/gen/gold_bydd_trd"
 
 # KRX 금시장 종목코드
 GOLD_ISU_CODES = {
@@ -68,9 +66,13 @@ GOLD_ISU_CODES = {
 }
 
 
+# ════════════════════════════════════════════════════════════
+#  내부 헬퍼
+# ════════════════════════════════════════════════════════════
+
 def _post_json(bld: str, params: dict, timeout: int = 30) -> dict:
     """KRX JSON API 단일 호출"""
-    data = {"bld": bld, **params}
+    data = {"bld": bld, "locale": "ko_KR", "csvxls_isNo": "false", **params}
     resp = requests.post(JSON_URL, data=data, headers=HEADERS, timeout=timeout)
     resp.raise_for_status()
     if not resp.text.strip():
@@ -78,31 +80,14 @@ def _post_json(bld: str, params: dict, timeout: int = 30) -> dict:
     return resp.json()
 
 
-def _try_json(bld_candidates: list, params: dict, log_fn=None) -> tuple[str, list]:
-    """여러 bld 경로를 시도하여 데이터가 있는 첫 번째 결과 반환
-
-    Returns
-    -------
-    tuple[str, list]
-        (성공한 bld 경로, 데이터 rows)
-    """
-    for bld in bld_candidates:
-        try:
-            result = _post_json(bld, params)
-            # KRX JSON 응답은 보통 "output" 또는 "OutBlock_1" 키에 데이터가 있음
-            rows = (
-                result.get("output")
-                or result.get("OutBlock_1")
-                or result.get("block1")
-                or []
-            )
-            if rows:
-                if log_fn:
-                    log_fn(f"  bld 경로 확인: {bld}")
-                return bld, rows
-        except Exception:
-            continue
-    return "", []
+def _extract_rows(result: dict) -> list:
+    """KRX JSON 응답에서 데이터 행 추출"""
+    return (
+        result.get("output")
+        or result.get("OutBlock_1")
+        or result.get("block1")
+        or []
+    )
 
 
 def _download_csv(url_path: str, params: dict) -> pd.DataFrame:
@@ -112,6 +97,7 @@ def _download_csv(url_path: str, params: dict) -> pd.DataFrame:
         "filetype": "csv",
         "url": url_path,
         "csvxls_isNo": "false",
+        "locale": "ko_KR",
         **params,
     }
     otp = requests.post(OTP_URL, data=otp_params, headers=HEADERS, timeout=30).text
@@ -121,7 +107,6 @@ def _download_csv(url_path: str, params: dict) -> pd.DataFrame:
 
     resp = requests.post(DOWN_URL, data={"code": otp}, headers=HEADERS, timeout=30)
 
-    # 인코딩 시도: EUC-KR → UTF-8
     for enc in ["EUC-KR", "cp949", "utf-8"]:
         try:
             df = pd.read_csv(BytesIO(resp.content), encoding=enc)
@@ -132,6 +117,62 @@ def _download_csv(url_path: str, params: dict) -> pd.DataFrame:
 
     return pd.DataFrame()
 
+
+def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """컬럼명 한글 매핑 및 숫자 정리"""
+    col_map = {
+        "ISU_NM": "종목명",
+        "ISU_SRT_CD": "종목코드",
+        "ISU_CD": "종목코드",
+        "TDD_CLSPRC": "종가",
+        "CMPPREVDD_PRC": "대비",
+        "FLUC_RT": "등락률(%)",
+        "FLUC_TP_CD": "등락구분",
+        "TDD_OPNPRC": "시가",
+        "TDD_HGPRC": "고가",
+        "TDD_LWPRC": "저가",
+        "ACC_TRDVOL": "거래량(g)",
+        "ACC_TRDVAL": "거래대금(원)",
+        "MKTCAP": "시가총액",
+        "TRD_DD": "일자",
+        "BAS_DD": "기준일",
+    }
+
+    renamed = {}
+    for old, new in col_map.items():
+        if old in df.columns:
+            renamed[old] = new
+    if renamed:
+        df = df.rename(columns=renamed)
+
+    # 숫자 컬럼의 콤마 제거 및 타입 변환
+    for col in df.columns:
+        if df[col].dtype == object:
+            sample = df[col].dropna()
+            if len(sample) == 0:
+                continue
+            s = str(sample.iloc[0])
+            cleaned = s.replace(",", "").replace("-", "").replace(".", "", 1)
+            if cleaned.isdigit() or (s.startswith("-") and cleaned.isdigit()):
+                df[col] = df[col].astype(str).str.replace(",", "", regex=False)
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+
+def _latest_biz_day() -> str:
+    """최근 영업일 추정 (주말 제외, 장 마감 전이면 전일)"""
+    now = datetime.now()
+    if now.hour < 18:
+        now -= timedelta(days=1)
+    while now.weekday() >= 5:
+        now -= timedelta(days=1)
+    return now.strftime("%Y%m%d")
+
+
+# ════════════════════════════════════════════════════════════
+#  공개 API
+# ════════════════════════════════════════════════════════════
 
 def get_gold_daily(trd_dd: str = None, log_fn=None) -> pd.DataFrame:
     """특정 일자의 KRX 금 전종목 시세 조회
@@ -154,27 +195,33 @@ def get_gold_daily(trd_dd: str = None, log_fn=None) -> pd.DataFrame:
     if log_fn:
         log_fn(f"  조회일: {trd_dd}")
 
-    # 방법 1: JSON API 시도
-    bld, rows = _try_json(BLD_GOLD_DAILY_CANDIDATES, {"trdDd": trd_dd}, log_fn)
-    if rows:
-        df = pd.DataFrame(rows)
-        return _clean_columns(df)
+    # 방법 1: JSON API (bld: MDCSTAT14901)
+    try:
+        result = _post_json(BLD_GOLD_DAILY, {"trdDd": trd_dd})
+        rows = _extract_rows(result)
+        if rows:
+            if log_fn:
+                log_fn(f"  JSON API 성공 (bld: MDCSTAT14901)")
+            return _clean_columns(pd.DataFrame(rows))
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  JSON API 실패: {e}")
 
-    # 방법 2: CSV 다운로드 시도
+    # 방법 2: CSV 다운로드 (동일 bld 경로)
     if log_fn:
-        log_fn("  JSON API 실패, CSV 다운로드 시도...")
-    for url_path in BLD_GOLD_DAILY_CANDIDATES:
-        try:
-            df = _download_csv(url_path, {"trdDd": trd_dd})
-            if not df.empty:
-                if log_fn:
-                    log_fn(f"  CSV 다운로드 성공: {url_path}")
-                return _clean_columns(df)
-        except Exception:
-            continue
+        log_fn("  CSV 다운로드 시도...")
+    try:
+        df = _download_csv(BLD_GOLD_DAILY, {"trdDd": trd_dd})
+        if not df.empty:
+            if log_fn:
+                log_fn("  CSV 다운로드 성공")
+            return _clean_columns(df)
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  CSV 다운로드 실패: {e}")
 
     if log_fn:
-        log_fn("  [!] 데이터를 가져올 수 없습니다.")
+        log_fn("  [!] 데이터를 가져올 수 없습니다. 영업일인지 확인해주세요.")
     return pd.DataFrame()
 
 
@@ -221,121 +268,96 @@ def get_gold_price_history(
         "isuCd": isu_cd,
     }
 
-    # 방법 1: JSON API
-    bld, rows = _try_json(BLD_GOLD_HISTORY_CANDIDATES, params, log_fn)
-    if rows:
-        df = pd.DataFrame(rows)
-        return _clean_columns(df)
+    # 방법 1: JSON API (bld: MDCSTAT15001)
+    try:
+        result = _post_json(BLD_GOLD_HISTORY, params)
+        rows = _extract_rows(result)
+        if rows:
+            if log_fn:
+                log_fn(f"  JSON API 성공 ({len(rows)}건)")
+            return _clean_columns(pd.DataFrame(rows))
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  JSON API 실패: {e}")
 
     # 방법 2: CSV 다운로드
     if log_fn:
-        log_fn("  JSON API 실패, CSV 다운로드 시도...")
-    for url_path in BLD_GOLD_HISTORY_CANDIDATES:
-        try:
-            df = _download_csv(url_path, params)
-            if not df.empty:
-                return _clean_columns(df)
-        except Exception:
-            continue
+        log_fn("  CSV 다운로드 시도...")
+    try:
+        df = _download_csv(BLD_GOLD_HISTORY, params)
+        if not df.empty:
+            if log_fn:
+                log_fn(f"  CSV 다운로드 성공 ({len(df)}건)")
+            return _clean_columns(df)
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  CSV 다운로드 실패: {e}")
 
     if log_fn:
         log_fn("  [!] 데이터를 가져올 수 없습니다.")
     return pd.DataFrame()
 
 
-def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """컬럼명 한글 매핑 및 숫자 정리"""
-    # KRX JSON 응답의 일반적인 영문 컬럼명 → 한글 매핑
-    col_map = {
-        "ISU_NM": "종목명",
-        "ISU_SRT_CD": "종목코드",
-        "ISU_CD": "종목코드",
-        "TDD_CLSPRC": "종가",
-        "CMPPREVDD_PRC": "대비",
-        "FLUC_RT": "등락률(%)",
-        "TDD_OPNPRC": "시가",
-        "TDD_HGPRC": "고가",
-        "TDD_LWPRC": "저가",
-        "ACC_TRDVOL": "거래량(g)",
-        "ACC_TRDVAL": "거래대금(원)",
-        "MKTCAP": "시가총액",
-        "TRD_DD": "일자",
-        "BAS_DD": "기준일",
-        "FLUC_TP_CD": "등락구분",
-    }
+def get_gold_intl(start_date: str, end_date: str = None, log_fn=None) -> pd.DataFrame:
+    """국제 금시세 동향 조회
 
-    renamed = {}
-    for old, new in col_map.items():
-        if old in df.columns:
-            renamed[old] = new
-    if renamed:
-        df = df.rename(columns=renamed)
-
-    # 숫자 컬럼 정리
-    for col in df.columns:
-        if df[col].dtype == object:
-            sample = df[col].dropna()
-            if len(sample) == 0:
-                continue
-            s = str(sample.iloc[0])
-            # 콤마가 있는 숫자 또는 순수 숫자
-            cleaned = s.replace(",", "").replace("-", "").replace(".", "", 1)
-            if cleaned.isdigit() or (s.startswith("-") and cleaned.isdigit()):
-                df[col] = df[col].astype(str).str.replace(",", "", regex=False)
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    return df
-
-
-def _latest_biz_day() -> str:
-    """최근 영업일 추정 (주말 제외, 장 마감 전이면 전일)"""
-    now = datetime.now()
-    # 오후 6시 이전이면 전일 기준 (장 마감 후 데이터 반영 고려)
-    if now.hour < 18:
-        now -= timedelta(days=1)
-    # 주말이면 금요일로
-    while now.weekday() >= 5:  # 5=토, 6=일
-        now -= timedelta(days=1)
-    return now.strftime("%Y%m%d")
-
-
-def discover_gold_bld(trd_dd: str = None) -> dict:
-    """브라우저 없이 금시장 bld 경로를 자동 탐색 (디버깅용)
+    Parameters
+    ----------
+    start_date : str
+        시작일 (YYYYMMDD)
+    end_date : str, optional
+        종료일 (YYYYMMDD). 미지정 시 오늘.
 
     Returns
     -------
-    dict
-        {"daily": "성공한_bld_경로", "history": "성공한_bld_경로"}
+    pd.DataFrame
+        국제 금시세 데이터
     """
-    if trd_dd is None:
-        trd_dd = _latest_biz_day()
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y%m%d")
 
-    result = {}
+    try:
+        result = _post_json(BLD_GOLD_INTL, {
+            "strtDd": start_date, "endDd": end_date,
+        })
+        rows = _extract_rows(result)
+        if rows:
+            return _clean_columns(pd.DataFrame(rows))
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  국제금시세 조회 실패: {e}")
 
-    # 전종목 시세 bld 탐색
-    for bld in BLD_GOLD_DAILY_CANDIDATES:
-        try:
-            j = _post_json(bld, {"trdDd": trd_dd})
-            rows = j.get("output") or j.get("OutBlock_1") or j.get("block1") or []
-            if rows:
-                result["daily"] = bld
-                break
-        except Exception:
-            continue
+    return pd.DataFrame()
 
-    # 기간별 시세 bld 탐색
-    end = trd_dd
-    start = (datetime.strptime(trd_dd, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
-    for bld in BLD_GOLD_HISTORY_CANDIDATES:
-        try:
-            j = _post_json(bld, {
-                "strtDd": start, "endDd": end, "isuCd": "KRD040200002",
-            })
-            rows = j.get("output") or j.get("OutBlock_1") or j.get("block1") or []
-            if rows:
-                result["history"] = bld
-                break
-        except Exception:
-            continue
 
-    return result
+def get_gold_open_api(bas_dd: str, api_key: str) -> pd.DataFrame:
+    """KRX Open API로 금시장 일별 거래 데이터 조회
+
+    openapi.krx.co.kr 에서 발급받은 API 키가 필요합니다.
+    일 10,000회 호출 제한, 2010년 이후 데이터 제공.
+
+    Parameters
+    ----------
+    bas_dd : str
+        기준일 (YYYYMMDD)
+    api_key : str
+        KRX Open API 인증키
+
+    Returns
+    -------
+    pd.DataFrame
+        금시장 일별 거래 데이터
+    """
+    resp = requests.get(
+        KRX_OPEN_API_GOLD,
+        params={"basDd": bas_dd, "AUTH_KEY": api_key},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    rows = data.get("output") or data.get("OutBlock_1") or data.get("block1") or []
+    if not rows:
+        return pd.DataFrame()
+
+    return _clean_columns(pd.DataFrame(rows))

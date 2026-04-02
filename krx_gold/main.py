@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from krx_gold.scraper import (
     get_gold_daily,
     get_gold_price_history,
+    get_gold_intl,
     _latest_biz_day,
 )
 
