@@ -66,7 +66,11 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
         resp = requests.get(rss_url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.content, "lxml-xml")
+        # Try xml parser first, fall back to html.parser
+        try:
+            soup = BeautifulSoup(resp.content, "xml")
+        except Exception:
+            soup = BeautifulSoup(resp.content, "html.parser")
         entries = soup.find_all("item", limit=max_results)
 
         for entry in entries:
@@ -81,11 +85,19 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
                 desc_soup = BeautifulSoup(description.text, "html.parser")
                 snippet = desc_soup.get_text(strip=True)[:200]
 
+            # Extract URL - Google News RSS puts URL as text after <link> tag
+            news_url = ""
+            if link:
+                if link.string:
+                    news_url = link.string.strip()
+                elif link.next_sibling and isinstance(link.next_sibling, str):
+                    news_url = link.next_sibling.strip()
+
             items.append(
                 NewsItem(
                     title=title.text.strip() if title else "No title",
                     source=source.text.strip() if source else "Unknown",
-                    url=link.next_sibling.strip() if link and link.next_sibling else (link.text.strip() if link else ""),
+                    url=news_url,
                     published=_format_date(pub_date.text.strip()) if pub_date else "Unknown",
                     snippet=snippet,
                 )
