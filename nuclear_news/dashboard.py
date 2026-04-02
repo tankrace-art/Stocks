@@ -161,8 +161,21 @@ def _draw_sector_cards(draw, y, sector, all_news, translated, fonts):
               fill=WHITE, font=fonts["section"])
     y += 62
 
+    # Check if any company in this sector has news
+    has_any_news = any(all_news.get(t, []) for t in sector["tickers"])
+    if not has_any_news:
+        draw.text((PAD + 20, y), "이 섹터에 주요 뉴스 없음",
+                  fill=SUB, font=fonts["news_body"])
+        y += 40
+        return y
+
     for ticker in sector["tickers"]:
         items = all_news.get(ticker, [])
+
+        # Skip companies with no material news
+        if not items:
+            continue
+
         trans = translated.get(ticker, [])
         company_ko = COMPANY_KO.get(ticker, "")
         company_en = NUCLEAR_COMPANIES[ticker]["name"]
@@ -188,9 +201,6 @@ def _draw_sector_cards(draw, y, sector, all_news, translated, fonts):
             block_h += 16  # spacing
             card_content_h += block_h
             news_blocks.append((item, title_lines, summary_lines, block_h))
-
-        if not items:
-            card_content_h = 44
 
         card_h = 66 + card_content_h + 12
 
@@ -225,10 +235,7 @@ def _draw_sector_cards(draw, y, sector, all_news, translated, fonts):
         cy += 14
 
         # News items
-        if not news_blocks:
-            draw.text((PAD + CARD_PAD, cy + 4), "  최근 관련 뉴스 없음",
-                      fill=SUB, font=fonts["news_body"])
-        else:
+        if news_blocks:
             for bi, (item, title_lines, summary_lines, bh) in enumerate(news_blocks):
                 date = _short_date(item.published)
                 source = item.source or ""
@@ -387,27 +394,28 @@ def format_dashboard(all_news: dict[str, list[NewsItem]]) -> list[str]:
     y += 12
 
     # Legend
-    d2.rounded_rectangle([(PAD, y), (W - PAD, y + 80)],
+    d2.rounded_rectangle([(PAD, y), (W - PAD, y + 100)],
                          radius=10, fill=WHITE, outline=BORDER, width=1)
     ly = y + 12
-    d2.text((PAD + CARD_PAD, ly), "📊 뉴스 신뢰도 안내", fill=TITLE, font=fonts["caption"])
+    d2.text((PAD + CARD_PAD, ly), "📋 필터링 기준", fill=TITLE, font=fonts["caption"])
     ly += 26
-    # Score legend items
-    for color, label in [(SCORE_HIGH, "높음: 1티어 매체 + 최신 + 핵심 키워드"),
-                         (SCORE_MED, "보통: 2티어 매체 또는 일반 뉴스"),
-                         (SCORE_LOW, "낮음: 출처 불분명 또는 오래된 뉴스")]:
-        d2.ellipse([(PAD + CARD_PAD, ly + 4), (PAD + CARD_PAD + 10, ly + 14)], fill=color)
-        d2.text((PAD + CARD_PAD + 16, ly), label, fill=SUB, font=fonts["date"])
+    for label in [
+        "✓ 계약, 인허가, 실적, 기술진전, 규제변화 등 기업 핵심 이벤트만 수집",
+        "✗ 증권사 목표가, 투자추천, 주식리스트, 낚시성 기사 자동 제거",
+        "✓ 교차검증: 2개 이상 매체에서 동일 뉴스 확인 시 표시",
+        "   주요 뉴스 없는 기업은 표시하지 않음",
+    ]:
+        d2.text((PAD + CARD_PAD, ly), label, fill=SUB, font=fonts["date"])
         ly += 20
-    y += 90
+    y += 110
 
     # Footer
     y += 10
     d2.line([(PAD, y), (W - PAD, y)], fill=BORDER, width=1)
     y += 14
     footer_lines = [
-        f"출처: Finviz · Google News RSS",
-        f"1티어: Reuters, Bloomberg, CNBC, WSJ, PR Newswire 등",
+        f"출처: Finviz · Google News RSS (보도자료 우선)",
+        f"1티어: Reuters, Bloomberg, CNBC, PR Newswire, Business Wire 등",
         f"✓ 교차검증 = 2개 이상 매체에서 동일 뉴스 확인",
         f"자동 생성 {now.strftime('%Y.%m.%d %H:%M')}",
     ]

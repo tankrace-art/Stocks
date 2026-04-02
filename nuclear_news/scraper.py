@@ -1,11 +1,12 @@
 """
 US Nuclear Energy Companies News Scraper
-With reliability scoring and cross-source verification.
+Filters for material company events only (contracts, regulatory, earnings, tech milestones).
+Excludes analyst opinions, price targets, and stock recommendation articles.
 """
 
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 from dataclasses import dataclass, field
 from urllib.parse import quote_plus
 
@@ -17,47 +18,83 @@ class NewsItem:
     url: str
     published: str
     snippet: str
-    score: int = 0           # importance/reliability score (0-100)
-    verified: bool = False   # appeared in 2+ sources
-    tags: list = field(default_factory=list)  # e.g. ["공시", "실적", "계약"]
+    score: int = 0
+    verified: bool = False
+    tags: list = field(default_factory=list)
 
 
-# ── Trusted source tiers ──
-TIER1_SOURCES = {
-    "Reuters", "Bloomberg", "CNBC", "AP News", "The Wall Street Journal",
-    "Financial Times", "Barron's", "MarketWatch", "Yahoo Finance",
-    "PR Newswire", "Business Wire", "GlobeNewswire", "SEC Filing",
+# ── Sources that publish actual company news (not opinions) ──
+PRIMARY_SOURCES = {
+    "Reuters", "Bloomberg", "AP News", "The Wall Street Journal",
+    "CNBC", "Financial Times",
+    "PR Newswire", "Business Wire", "GlobeNewswire", "Accesswire",  # company press releases
+    "SEC Filing", "Nuclear Newswire", "World Nuclear News",
+    "Power Magazine", "Utility Dive", "Energy.gov",
 }
-TIER2_SOURCES = {
-    "Seeking Alpha", "Benzinga", "Investopedia", "TipRanks",
-    "GuruFocus.com", "Barchart", "Zacks", "InvestorPlace",
-    "The Motley Fool", "Exec Edge", "Nasdaq", "24/7 Wall St.",
+SECONDARY_SOURCES = {
+    "MarketWatch", "Yahoo Finance", "Benzinga", "Nasdaq",
+    "Exec Edge", "TMX Newsfilo",
 }
-SPAM_KEYWORDS = [
+
+# ── JUNK: these keywords = skip the article entirely ──
+JUNK_PATTERNS = [
+    # Analyst/broker opinions
+    "price target", "raised to", "lowered to", "upgraded", "downgraded",
+    "buy rating", "sell rating", "hold rating", "overweight", "underweight",
+    "outperform", "neutral rating",
+    # Stock picking / listicles
+    "stocks to buy", "stocks to watch", "top picks", "best stocks",
+    "should you buy", "is it a buy", "millionaire", "get rich",
     "short seller", "meme stock", "you won't believe",
-    "millionaire", "retire early", "get rich",
+    "stocks are a short seller's dream", "likely losers",
+    "most popular stock", "wall street loves", "cathie wood buys",
+    "ark invest", "whale alert",
+    # Generic market commentary
+    "why is.*moving", "why is.*up today", "why is.*down today",
+    "what happened to", "stock alert",
+    "fiduciary review", "class action", "lawsuit filed",  # legal spam
 ]
 
-# ── News category tags (keyword → Korean tag) ──
-CATEGORY_KEYWORDS = {
-    "SEC": "공시", "filing": "공시", "report": "공시",
-    "earnings": "실적", "revenue": "실적", "profit": "실적", "quarterly": "실적",
-    "contract": "계약", "deal": "계약", "partnership": "제휴", "agreement": "계약",
-    "NRC": "규제", "license": "인허가", "permit": "인허가", "regulatory": "규제", "approval": "인허가",
-    "reactor": "원자로", "SMR": "SMR", "microreactor": "마이크로원자로",
-    "uranium": "우라늄", "enrichment": "농축", "fuel": "핵연료",
-    "price target": "목표가", "upgrade": "투자의견", "downgrade": "투자의견", "analyst": "애널리스트",
-    "construction": "건설", "deployment": "배치", "operation": "운영",
-    "DOE": "에너지부", "funding": "자금", "investment": "투자",
+# ── SIGNAL: these keywords = actual company events worth knowing ──
+SIGNAL_KEYWORDS = {
+    # Regulatory / Licensing (가장 중요)
+    "nrc": ("인허가", 25), "nuclear regulatory": ("인허가", 25),
+    "license": ("인허가", 20), "permit": ("인허가", 20),
+    "approved": ("승인", 20), "approval": ("승인", 20),
+    "regulatory": ("규제", 15),
+    # Contracts & Business
+    "contract": ("계약", 20), "agreement": ("계약", 18),
+    "partnership": ("제휴", 18), "strategic": ("전략", 12),
+    "signed": ("계약체결", 18), "awarded": ("수주", 20),
+    "memorandum": ("MOU", 15), "mou": ("MOU", 15),
+    # Financials
+    "earnings": ("실적", 18), "revenue": ("실적", 15),
+    "quarterly results": ("분기실적", 20), "annual report": ("연간실적", 18),
+    "profit": ("실적", 12), "loss": ("실적", 12),
+    # Technology & Operations
+    "construction": ("건설", 18), "deployment": ("배치", 18),
+    "operational": ("운영", 15), "commissioning": ("시운전", 20),
+    "milestone": ("이정표", 15), "first criticality": ("임계", 25),
+    "enrichment": ("농축", 15), "production": ("생산", 12),
+    "fuel delivery": ("연료공급", 20), "fuel fabrication": ("연료제조", 18),
+    # Government & Policy
+    "doe": ("에너지부", 15), "department of energy": ("에너지부", 15),
+    "funding": ("자금지원", 15), "grant": ("보조금", 15),
+    "executive order": ("행정명령", 20), "legislation": ("법안", 15),
+    "bipartisan": ("초당적", 10),
+    # Major corporate events
+    "acquisition": ("인수", 20), "merger": ("합병", 20),
+    "ipo": ("IPO", 18), "offering": ("증자", 12),
+    "ceo": ("CEO", 10), "appointed": ("인사", 12), "resigned": ("인사", 15),
 }
 
 NUCLEAR_COMPANIES = {
-    "OKLO": {"name": "Oklo Inc.", "keywords": ["Oklo", "OKLO stock"]},
-    "SMR": {"name": "NuScale Power", "keywords": ["NuScale Power", "SMR stock NuScale"]},
-    "LEU": {"name": "Centrus Energy", "keywords": ["Centrus Energy", "LEU stock"]},
-    "CCJ": {"name": "Cameco Corp", "keywords": ["Cameco", "CCJ stock"]},
-    "UEC": {"name": "Uranium Energy Corp", "keywords": ["Uranium Energy Corp", "UEC stock"]},
-    "NNE": {"name": "Nano Nuclear Energy", "keywords": ["Nano Nuclear Energy", "NNE stock"]},
+    "OKLO": {"name": "Oklo Inc.", "keywords": ["Oklo Inc"]},
+    "SMR": {"name": "NuScale Power", "keywords": ["NuScale Power"]},
+    "LEU": {"name": "Centrus Energy", "keywords": ["Centrus Energy"]},
+    "CCJ": {"name": "Cameco Corp", "keywords": ["Cameco corporation"]},
+    "UEC": {"name": "Uranium Energy Corp", "keywords": ["Uranium Energy Corp"]},
+    "NNE": {"name": "Nano Nuclear Energy", "keywords": ["Nano Nuclear Energy"]},
 }
 
 HEADERS = {
@@ -69,67 +106,58 @@ HEADERS = {
 }
 
 
-def _score_news(item: NewsItem) -> int:
-    """Score a news item by reliability and importance (0-100)."""
-    score = 30  # base score
+def _is_junk(item: NewsItem) -> bool:
+    """Return True if this is an analyst opinion or clickbait article."""
+    text = (item.title + " " + item.snippet).lower()
+    for pattern in JUNK_PATTERNS:
+        if pattern in text:
+            return True
+    return False
 
-    # Source tier scoring
-    if item.source in TIER1_SOURCES:
-        score += 30
-    elif item.source in TIER2_SOURCES:
-        score += 15
-    elif any(t1.lower() in item.source.lower() for t1 in TIER1_SOURCES):
-        score += 25
-    elif any(t2.lower() in item.source.lower() for t2 in TIER2_SOURCES):
+
+def _score_news(item: NewsItem) -> tuple[int, list[str]]:
+    """Score by how material the news is for investment decisions.
+    Returns (score, tags). Higher = more important company event."""
+    score = 0
+    tags = []
+    seen_tags = set()
+    text = (item.title + " " + item.snippet).lower()
+
+    # Signal keyword matching
+    for keyword, (tag, points) in SIGNAL_KEYWORDS.items():
+        if keyword in text:
+            score += points
+            if tag not in seen_tags:
+                tags.append(tag)
+                seen_tags.add(tag)
+
+    # Source credibility
+    src = item.source
+    if src in PRIMARY_SOURCES or any(s.lower() in src.lower() for s in PRIMARY_SOURCES):
+        score += 20
+    elif src in SECONDARY_SOURCES or any(s.lower() in src.lower() for s in SECONDARY_SOURCES):
+        score += 8
+
+    # Press releases are usually material company announcements
+    if any(pr in src for pr in ["PR Newswire", "Business Wire", "GlobeNewswire", "Accesswire"]):
         score += 10
+        if "보도자료" not in seen_tags:
+            tags.append("보도자료")
 
-    # Has snippet (more informative)
-    if item.snippet:
-        score += 10
-
-    # Recency bonus
+    # Recency
     if "Today" in item.published:
-        score += 15
-    elif _is_within_days(item.published, 2):
         score += 10
-    elif _is_within_days(item.published, 7):
+    elif _is_within_days(item.published, 3):
         score += 5
 
-    # Important keyword bonus
-    title_lower = item.title.lower()
-    important_keywords = ["contract", "deal", "partnership", "license", "approval",
-                          "nrc", "doe", "earnings", "revenue", "sec filing",
-                          "construction", "deployment", "reactor"]
-    for kw in important_keywords:
-        if kw in title_lower:
-            score += 8
-            break
+    # Has substance (snippet available)
+    if item.snippet and len(item.snippet) > 50:
+        score += 5
 
-    # Spam penalty
-    for spam in SPAM_KEYWORDS:
-        if spam in title_lower:
-            score -= 30
-            break
-
-    return max(0, min(100, score))
-
-
-def _tag_news(item: NewsItem) -> list[str]:
-    """Assign Korean category tags to a news item."""
-    tags = []
-    text = (item.title + " " + item.snippet).lower()
-    seen = set()
-    for keyword, tag in CATEGORY_KEYWORDS.items():
-        if keyword.lower() in text and tag not in seen:
-            tags.append(tag)
-            seen.add(tag)
-        if len(tags) >= 2:
-            break
-    return tags
+    return score, tags[:3]
 
 
 def _is_within_days(date_str: str, days: int) -> bool:
-    """Check if a date string is within N days of now."""
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
         return (datetime.now() - dt).days <= days
@@ -137,29 +165,23 @@ def _is_within_days(date_str: str, days: int) -> bool:
         return False
 
 
-def _cross_verify(all_items: list[NewsItem]) -> list[NewsItem]:
+def _cross_verify(all_items: list[NewsItem]) -> None:
     """Mark items as verified if similar titles appear from different sources."""
-    for i, item_a in enumerate(all_items):
-        for j, item_b in enumerate(all_items):
-            if i >= j:
+    for i, a in enumerate(all_items):
+        for j, b in enumerate(all_items):
+            if i >= j or a.source == b.source:
                 continue
-            if item_a.source == item_b.source:
-                continue
-            # Simple similarity: check if 3+ words overlap
-            words_a = set(item_a.title.lower().split())
-            words_b = set(item_b.title.lower().split())
-            overlap = words_a & words_b
-            # Remove common stop words
-            stop = {"the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "is", "with"}
-            meaningful_overlap = overlap - stop
-            if len(meaningful_overlap) >= 3:
-                item_a.verified = True
-                item_b.verified = True
-    return all_items
+            words_a = set(a.title.lower().split())
+            words_b = set(b.title.lower().split())
+            stop = {"the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "is", "with", "as"}
+            overlap = (words_a & words_b) - stop
+            if len(overlap) >= 3:
+                a.verified = True
+                b.verified = True
 
 
-def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
-    """Scrape Google News RSS feed for a given query."""
+def scrape_google_news(query: str, max_results: int = 8) -> list[NewsItem]:
+    """Scrape Google News RSS feed."""
     items = []
     try:
         encoded_query = quote_plus(query)
@@ -171,9 +193,8 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
             soup = BeautifulSoup(resp.content, "xml")
         except Exception:
             soup = BeautifulSoup(resp.content, "html.parser")
-        entries = soup.find_all("item", limit=max_results)
 
-        for entry in entries:
+        for entry in soup.find_all("item", limit=max_results):
             title = entry.find("title")
             link = entry.find("link")
             pub_date = entry.find("pubDate")
@@ -183,7 +204,7 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
             snippet = ""
             if description and description.text:
                 desc_soup = BeautifulSoup(description.text, "html.parser")
-                snippet = desc_soup.get_text(strip=True)[:200]
+                snippet = desc_soup.get_text(strip=True)[:300]
 
             news_url = ""
             if link:
@@ -192,22 +213,20 @@ def scrape_google_news(query: str, max_results: int = 5) -> list[NewsItem]:
                 elif link.next_sibling and isinstance(link.next_sibling, str):
                     news_url = link.next_sibling.strip()
 
-            items.append(
-                NewsItem(
-                    title=title.text.strip() if title else "No title",
-                    source=source.text.strip() if source else "Unknown",
-                    url=news_url,
-                    published=_format_date(pub_date.text.strip()) if pub_date else "Unknown",
-                    snippet=snippet,
-                )
-            )
+            items.append(NewsItem(
+                title=title.text.strip() if title else "",
+                source=source.text.strip() if source else "Unknown",
+                url=news_url,
+                published=_format_date(pub_date.text.strip()) if pub_date else "Unknown",
+                snippet=snippet,
+            ))
     except Exception as e:
-        print(f"  [WARN] Google News fetch failed for '{query}': {type(e).__name__}")
+        print(f"  [WARN] Google News failed for '{query}': {type(e).__name__}")
     return items
 
 
-def scrape_finviz_news(ticker: str, max_results: int = 5) -> list[NewsItem]:
-    """Scrape news from Finviz for a given ticker."""
+def scrape_finviz_news(ticker: str, max_results: int = 8) -> list[NewsItem]:
+    """Scrape news from Finviz."""
     items = []
     try:
         url = f"https://finviz.com/quote.ashx?t={ticker}"
@@ -219,14 +238,12 @@ def scrape_finviz_news(ticker: str, max_results: int = 5) -> list[NewsItem]:
         if not news_table:
             return items
 
-        rows = news_table.find_all("tr", limit=max_results)
         current_date = ""
-        for row in rows:
+        for row in news_table.find_all("tr", limit=max_results):
             date_cell = row.find("td", {"align": "right"})
             content_cell = row.find("td", {"align": "left"})
             if not content_cell:
                 continue
-
             if date_cell:
                 date_text = date_cell.text.strip()
                 if len(date_text) > 8:
@@ -238,67 +255,68 @@ def scrape_finviz_news(ticker: str, max_results: int = 5) -> list[NewsItem]:
             link = content_cell.find("a")
             if link:
                 source_span = content_cell.find("span")
-                items.append(
-                    NewsItem(
-                        title=link.text.strip(),
-                        source=source_span.text.strip() if source_span else "Finviz",
-                        url=link.get("href", ""),
-                        published=f"{current_date} {time_str}".strip() if current_date else "Recent",
-                        snippet="",
-                    )
-                )
+                items.append(NewsItem(
+                    title=link.text.strip(),
+                    source=source_span.text.strip() if source_span else "Finviz",
+                    url=link.get("href", ""),
+                    published=f"{current_date} {time_str}".strip() if current_date else "Recent",
+                    snippet="",
+                ))
     except Exception as e:
-        print(f"  [WARN] Finviz fetch failed for '{ticker}': {type(e).__name__}")
+        print(f"  [WARN] Finviz failed for '{ticker}': {type(e).__name__}")
     return items
 
 
-def fetch_all_news(max_per_source: int = 5) -> dict[str, list[NewsItem]]:
-    """Fetch, score, verify, and filter news for all companies."""
+def fetch_all_news(max_per_source: int = 8) -> dict[str, list[NewsItem]]:
+    """Fetch, filter junk, score, and return only material news.
+    Companies with no meaningful news are returned with empty lists."""
     all_news = {}
-    all_items_flat = []  # for cross-verification
+    all_items_flat = []
 
     for ticker, info in NUCLEAR_COMPANIES.items():
-        company_news = []
+        raw_news = []
 
-        # Google News RSS (fetch more for better filtering)
-        for keyword in info["keywords"][:1]:
-            google_items = scrape_google_news(keyword, max_results=max_per_source)
-            company_news.extend(google_items)
-
-        # Finviz
-        finviz_items = scrape_finviz_news(ticker, max_results=max_per_source)
-        company_news.extend(finviz_items)
+        # Fetch from multiple sources
+        for keyword in info["keywords"]:
+            raw_news.extend(scrape_google_news(keyword, max_results=max_per_source))
+        raw_news.extend(scrape_finviz_news(ticker, max_results=max_per_source))
 
         # Deduplicate
-        seen_titles = set()
-        unique_news = []
-        for item in company_news:
-            title_key = item.title.lower()[:50]
-            if title_key not in seen_titles:
-                seen_titles.add(title_key)
-                unique_news.append(item)
+        seen = set()
+        unique = []
+        for item in raw_news:
+            key = item.title.lower()[:60]
+            if key not in seen and item.title:
+                seen.add(key)
+                unique.append(item)
 
-        # Score and tag each item
-        for item in unique_news:
-            item.score = _score_news(item)
-            item.tags = _tag_news(item)
+        # Step 1: Remove junk (analyst opinions, clickbait)
+        filtered = [item for item in unique if not _is_junk(item)]
+        junk_count = len(unique) - len(filtered)
+        if junk_count:
+            print(f"  [{ticker}] Filtered out {junk_count} junk articles")
 
-        all_items_flat.extend(unique_news)
+        # Step 2: Score remaining by materiality
+        for item in filtered:
+            item.score, item.tags = _score_news(item)
 
-        # Sort by score (highest first), keep top 2
-        unique_news.sort(key=lambda x: x.score, reverse=True)
+        all_items_flat.extend(filtered)
 
-        # Filter out low-quality news (score < 20)
-        quality_news = [n for n in unique_news if n.score >= 20]
-        all_news[ticker] = quality_news[:2]
+        # Step 3: Keep only material news (score >= 25)
+        material = [n for n in filtered if n.score >= 25]
+        material.sort(key=lambda x: x.score, reverse=True)
 
-    # Cross-verify across all companies
+        # Max 2 per company
+        all_news[ticker] = material[:2]
+
+    # Cross-verify
     _cross_verify(all_items_flat)
 
-    # Print verification summary
+    # Summary
     total = sum(len(v) for v in all_news.values())
+    companies_with_news = sum(1 for v in all_news.values() if v)
     verified = sum(1 for items in all_news.values() for i in items if i.verified)
-    print(f"  Quality filter: {total} articles selected, {verified} cross-verified")
+    print(f"  Result: {total} material articles from {companies_with_news} companies ({verified} cross-verified)")
 
     return all_news
 
