@@ -177,7 +177,7 @@ def fetch_all_news(max_per_source: int = 3) -> dict[str, list[NewsItem]]:
                 seen_titles.add(title_key)
                 unique_news.append(item)
 
-        all_news[ticker] = unique_news[:5]
+        all_news[ticker] = unique_news[:2]
 
     return all_news
 
