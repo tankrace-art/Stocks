@@ -1,9 +1,11 @@
 """KRX 금시장 데이터 수집 - GUI 버전
 
-더블클릭으로 실행 가능한 GUI 프로그램입니다.
-- 금 전종목 일별 시세 조회
-- 금 1kg/100g/10g 기간별 시세 추이
-- 엑셀 파일로 저장
+KRX Open API를 사용하여 금 현물 시세를 조회합니다.
+
+API 키 발급:
+  1. https://openapi.krx.co.kr 회원가입
+  2. [마이페이지] → 인증키 신청
+  3. [서비스 신청] → 일반상품 신청
 """
 
 import os
@@ -15,27 +17,34 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from krx_gold.scraper import (
-    get_gold_daily,
-    get_gold_price_history,
-    get_gold_intl,
-    _latest_biz_day,
-)
+from krx_gold.scraper import get_gold_daily, get_gold_price_history, _latest_biz_day
 
 import pandas as pd
 
-GOLD_ITEMS = {
-    "금 1kg": "KRD040200002",
-    "금 100g": "KRD040200001",
-    "금 미니(10g)": "KRD040200003",
-}
+# API 키 저장 파일
+CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".krx_gold")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "api_key.txt")
+
+
+def _load_api_key() -> str:
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+
+def _save_api_key(key: str):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        f.write(key)
 
 
 class KrxGoldApp:
     def __init__(self, root):
         self.root = root
         self.root.title("KRX 금시장 데이터 수집기")
-        self.root.geometry("850x700")
+        self.root.geometry("850x750")
         self.root.resizable(True, True)
         self._build_ui()
         self.running = False
@@ -56,9 +65,22 @@ class KrxGoldApp:
             font=("맑은 고딕", 9),
         ).pack(side="right", pady=5)
 
+        # ── API 키 입력 ──
+        api_frame = ttk.LabelFrame(self.root, text=" KRX Open API 인증키 ", padding=10)
+        api_frame.pack(fill="x", padx=15, pady=(10, 5))
+
+        self.api_key_var = tk.StringVar(value=_load_api_key())
+        ttk.Entry(
+            api_frame, textvariable=self.api_key_var, width=50,
+            font=("맑은 고딕", 10), show="*",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        ttk.Button(api_frame, text="키 저장", command=self._save_key).pack(side="left", padx=5)
+        ttk.Button(api_frame, text="발급 안내", command=self._show_api_guide).pack(side="right")
+
         # ── 조회 모드 선택 ──
         mode_frame = ttk.LabelFrame(self.root, text=" 조회 모드 ", padding=10)
-        mode_frame.pack(fill="x", padx=15, pady=(10, 5))
+        mode_frame.pack(fill="x", padx=15, pady=5)
 
         self.mode_var = tk.StringVar(value="daily")
         ttk.Radiobutton(
@@ -66,20 +88,15 @@ class KrxGoldApp:
             value="daily", command=self._on_mode_change,
         ).grid(row=0, column=0, padx=15)
         ttk.Radiobutton(
-            mode_frame, text="종목별 기간 시세 추이", variable=self.mode_var,
+            mode_frame, text="기간별 시세 추이", variable=self.mode_var,
             value="history", command=self._on_mode_change,
         ).grid(row=0, column=1, padx=15)
-        ttk.Radiobutton(
-            mode_frame, text="국제금시세 동향", variable=self.mode_var,
-            value="intl", command=self._on_mode_change,
-        ).grid(row=0, column=2, padx=15)
 
         # ── 입력 영역 ──
         input_frame = ttk.LabelFrame(self.root, text=" 조회 조건 ", padding=15)
         input_frame.pack(fill="x", padx=15, pady=5)
-        self.input_frame = input_frame
 
-        # 조회일 (daily 모드)
+        # 조회일
         ttk.Label(input_frame, text="조회일:", font=("맑은 고딕", 11)).grid(
             row=0, column=0, sticky="w", pady=5
         )
@@ -92,29 +109,30 @@ class KrxGoldApp:
             row=0, column=2, sticky="w", padx=5
         )
 
-        # 종목 선택 (history 모드)
+        # 종목 필터
         ttk.Label(input_frame, text="종목:", font=("맑은 고딕", 11)).grid(
             row=1, column=0, sticky="w", pady=5
         )
-        self.item_var = tk.StringVar(value="금 1kg")
+        self.item_var = tk.StringVar(value="전체")
         self.item_combo = ttk.Combobox(
             input_frame, textvariable=self.item_var,
-            values=list(GOLD_ITEMS.keys()), state="readonly", width=13,
+            values=["전체", "1Kg", "100g", "10g"], state="readonly", width=13,
             font=("맑은 고딕", 11),
         )
         self.item_combo.grid(row=1, column=1, sticky="w", padx=(10, 5), pady=5)
 
-        # 기간 (history 모드)
+        # 시작일
         ttk.Label(input_frame, text="시작일:", font=("맑은 고딕", 11)).grid(
             row=2, column=0, sticky="w", pady=5
         )
-        default_start = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+        default_start = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
         self.start_var = tk.StringVar(value=default_start)
         self.start_entry = ttk.Entry(
             input_frame, textvariable=self.start_var, width=15, font=("맑은 고딕", 11)
         )
         self.start_entry.grid(row=2, column=1, sticky="w", padx=(10, 5), pady=5)
 
+        # 종료일
         ttk.Label(input_frame, text="종료일:", font=("맑은 고딕", 11)).grid(
             row=3, column=0, sticky="w", pady=5
         )
@@ -127,7 +145,7 @@ class KrxGoldApp:
         # 빠른 기간 버튼
         quick_frame = ttk.Frame(input_frame)
         quick_frame.grid(row=2, column=2, rowspan=2, sticky="w", padx=10)
-        for label, days in [("1개월", 30), ("3개월", 90), ("6개월", 180), ("1년", 365)]:
+        for label, days in [("1주", 7), ("1개월", 30), ("3개월", 90), ("6개월", 180)]:
             ttk.Button(
                 quick_frame, text=label, width=6,
                 command=lambda d=days: self._set_period(d),
@@ -172,11 +190,10 @@ class KrxGoldApp:
         log_frame.pack(fill="both", expand=True, padx=15, pady=(5, 15))
 
         self.log_text = scrolledtext.ScrolledText(
-            log_frame, height=18, font=("Consolas", 9), state="disabled", wrap="none"
+            log_frame, height=14, font=("Consolas", 9), state="disabled", wrap="none"
         )
         self.log_text.pack(fill="both", expand=True)
 
-        # 가로 스크롤
         h_scroll = ttk.Scrollbar(log_frame, orient="horizontal",
                                   command=self.log_text.xview)
         h_scroll.pack(fill="x")
@@ -192,14 +209,9 @@ class KrxGoldApp:
             self.item_combo.config(state="disabled")
             self.start_entry.config(state="disabled")
             self.end_entry.config(state="disabled")
-        elif mode == "history":
+        else:
             self.date_entry.config(state="disabled")
             self.item_combo.config(state="readonly")
-            self.start_entry.config(state="normal")
-            self.end_entry.config(state="normal")
-        else:  # intl
-            self.date_entry.config(state="disabled")
-            self.item_combo.config(state="disabled")
             self.start_entry.config(state="normal")
             self.end_entry.config(state="normal")
 
@@ -215,6 +227,27 @@ class KrxGoldApp:
         if folder:
             self.save_dir_var.set(folder)
 
+    def _save_key(self):
+        key = self.api_key_var.get().strip()
+        if key:
+            _save_api_key(key)
+            messagebox.showinfo("저장 완료", "API 키가 저장되었습니다.\n다음 실행 시 자동으로 불러옵니다.")
+        else:
+            messagebox.showwarning("입력 오류", "API 키를 입력해주세요.")
+
+    def _show_api_guide(self):
+        messagebox.showinfo(
+            "KRX Open API 인증키 발급 안내",
+            "1. https://openapi.krx.co.kr 접속\n"
+            "2. 회원가입 후 로그인\n"
+            "3. [마이페이지] → [인증키 신청] 클릭\n"
+            "4. 인증키 발급 (즉시 발급)\n"
+            "5. [서비스 신청] → [일반상품] 체크 후 신청\n"
+            "6. 발급받은 인증키를 위 입력란에 붙여넣기\n\n"
+            "* 무료, 일 10,000회 호출 가능\n"
+            "* 2010년 이후 데이터 제공",
+        )
+
     def _log(self, msg):
         def _append():
             self.log_text.config(state="normal")
@@ -229,6 +262,11 @@ class KrxGoldApp:
         self.log_text.config(state="disabled")
 
     def _start(self):
+        api_key = self.api_key_var.get().strip()
+        if not api_key:
+            self._show_api_guide()
+            return
+
         if self.running:
             return
         self.running = True
@@ -238,7 +276,7 @@ class KrxGoldApp:
         self._clear_log()
         self.last_df = None
 
-        thread = threading.Thread(target=self._run, daemon=True)
+        thread = threading.Thread(target=self._run, args=(api_key,), daemon=True)
         thread.start()
 
     def _finish(self):
@@ -250,7 +288,7 @@ class KrxGoldApp:
             self.progress.stop()
         self.root.after(0, _restore)
 
-    def _run(self):
+    def _run(self, api_key):
         try:
             mode = self.mode_var.get()
 
@@ -259,96 +297,68 @@ class KrxGoldApp:
                 self._log(f"[KRX 금시장] {trd_dd} 전종목 시세 조회 중...")
                 self._log("")
 
-                df = get_gold_daily(trd_dd, log_fn=self._log)
+                df = get_gold_daily(trd_dd, api_key=api_key, log_fn=self._log)
                 self.last_df = df
 
                 if df.empty:
-                    self._log("데이터가 없습니다. 영업일인지 확인해주세요.")
-                    self._log("")
-                    self._log("참고: KRX 금시장은 평일에만 운영됩니다.")
+                    self._log("\n데이터가 없습니다. 영업일인지 확인해주세요.")
+                    self._log("(KRX 금시장은 평일에만 운영됩니다)")
                 else:
-                    self._log(f"총 {len(df)}개 종목 조회 완료")
-                    self._log("")
+                    self._log(f"\n총 {len(df)}개 종목 조회 완료\n")
                     self._log(df.to_string(index=False))
 
-            elif mode == "history":
+            else:  # history
                 start = self.start_var.get().strip()
                 end = self.end_var.get().strip()
-                item_name = self.item_var.get()
-                isu_cd = GOLD_ITEMS[item_name]
+                item = self.item_var.get()
+                item_filter = None if item == "전체" else item
 
-                self._log(f"[KRX 금시장] {item_name} 시세 추이 조회 중...")
-                df = get_gold_price_history(start, end, isu_cd, log_fn=self._log)
-                self.last_df = df
-
-                if df.empty:
-                    self._log("데이터가 없습니다.")
-                else:
-                    self._log(f"총 {len(df)}일 데이터 조회 완료")
-                    self._log("")
-                    self._log(df.to_string(index=False))
-                    self._show_stats(df, item_name)
-
-            else:  # intl (국제금시세)
-                start = self.start_var.get().strip()
-                end = self.end_var.get().strip()
-
-                self._log(f"[KRX 금시장] 국제금시세 동향 조회 중...")
-                self._log(f"  기간: {start} ~ {end}")
+                self._log(f"[KRX 금시장] 기간별 시세 추이 조회 중...")
                 self._log("")
 
-                df = get_gold_intl(start, end, log_fn=self._log)
+                df = get_gold_price_history(
+                    start, end, api_key=api_key,
+                    item_filter=item_filter, log_fn=self._log,
+                )
                 self.last_df = df
 
                 if df.empty:
-                    self._log("데이터가 없습니다.")
+                    self._log("\n데이터가 없습니다.")
                 else:
-                    self._log(f"총 {len(df)}건 조회 완료")
-                    self._log("")
-                    self._log(df.to_string(index=False))
+                    self._log(f"\n{df.to_string(index=False)}")
+                    self._show_stats(df)
 
+        except ValueError as e:
+            self._log(f"\n[설정 오류] {e}")
         except Exception as e:
             self._log(f"\n[오류] {type(e).__name__}: {e}")
             import traceback
             self._log(traceback.format_exc())
-
         finally:
             self._finish()
 
-    def _show_stats(self, df, item_name):
-        """간단 통계 출력"""
-        numeric_cols = df.select_dtypes(include="number").columns
-        price_col = None
-        for candidate in ["TDD_CLSPRC", "종가", "CLSPRC", "ClsPrc"]:
-            if candidate in df.columns:
-                price_col = candidate
+    def _show_stats(self, df):
+        for col in ["종가", "TDD_CLSPRC"]:
+            if col in df.columns:
+                prices = pd.to_numeric(df[col], errors="coerce").dropna()
+                if len(prices) > 1:
+                    self._log(f"\n{'=' * 50}")
+                    self._log(f"  기간 통계")
+                    self._log(f"{'=' * 50}")
+                    self._log(f"  최고가: {prices.max():>12,.0f}")
+                    self._log(f"  최저가: {prices.min():>12,.0f}")
+                    self._log(f"  평균가: {prices.mean():>12,.0f}")
+                    if prices.iloc[0] != 0:
+                        chg = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
+                        self._log(f"  기간 수익률: {chg:>+10.2f} %")
                 break
-        if price_col is None and len(numeric_cols) > 0:
-            price_col = numeric_cols[0]
 
-        if price_col and len(df) > 1:
-            prices = pd.to_numeric(df[price_col], errors="coerce").dropna()
-            if len(prices) > 0:
-                self._log(f"\n{'=' * 50}")
-                self._log(f"  {item_name} 기간 통계")
-                self._log(f"{'=' * 50}")
-                self._log(f"  최고가: {prices.max():>12,.0f} 원/g")
-                self._log(f"  최저가: {prices.min():>12,.0f} 원/g")
-                self._log(f"  평균가: {prices.mean():>12,.0f} 원/g")
-                if prices.iloc[0] != 0:
-                    change = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
-                    self._log(f"  기간 수익률: {change:>+10.2f} %")
-
-        vol_col = None
-        for candidate in ["ACC_TRDVOL", "거래량", "TRDVOL", "TrdVol"]:
-            if candidate in df.columns:
-                vol_col = candidate
+        for col in ["거래량(g)", "ACC_TRDVOL"]:
+            if col in df.columns:
+                vols = pd.to_numeric(df[col], errors="coerce").dropna()
+                if len(vols) > 0:
+                    self._log(f"  총 거래량: {vols.sum():>10,.0f} g")
                 break
-        if vol_col:
-            vols = pd.to_numeric(df[vol_col], errors="coerce").dropna()
-            if len(vols) > 0:
-                self._log(f"  총 거래량: {vols.sum():>10,.0f} g")
-                self._log(f"  일평균 거래량: {vols.mean():>8,.0f} g")
 
     def _save_excel(self):
         if self.last_df is None or self.last_df.empty:
@@ -358,19 +368,18 @@ class KrxGoldApp:
         save_dir = self.save_dir_var.get()
         os.makedirs(save_dir, exist_ok=True)
 
-        mode = self.mode_var.get()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        mode = self.mode_var.get()
 
         if mode == "daily":
             trd_dd = self.date_var.get().strip()
-            filename = f"KRX금시장_전종목_{trd_dd}_{timestamp}.xlsx"
-            sheet = f"금전종목_{trd_dd}"
+            filename = f"KRX금시장_{trd_dd}_{timestamp}.xlsx"
+            sheet = f"금시세_{trd_dd}"
         else:
-            item = self.item_var.get().replace(" ", "")
             start = self.start_var.get().strip()
             end = self.end_var.get().strip()
-            filename = f"KRX금시장_{item}_{start}_{end}_{timestamp}.xlsx"
-            sheet = f"{item}_{start}_{end}"
+            filename = f"KRX금시장_{start}_{end}_{timestamp}.xlsx"
+            sheet = f"금시세_{start}_{end}"
 
         filepath = os.path.join(save_dir, filename)
 
