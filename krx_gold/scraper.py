@@ -164,7 +164,18 @@ def get_gold_price_history(
 def _call_api(url: str, params: dict, api_key: str, log_fn=None) -> pd.DataFrame:
     """KRX Open API 호출"""
     params["AUTH_KEY"] = api_key
+
     resp = requests.get(url, params=params, timeout=30)
+
+    # 401 = 서비스 미신청 or 인증키 오류
+    if resp.status_code == 401:
+        raise RuntimeError(
+            "인증 실패 (401). 아래를 확인해주세요:\n"
+            "  1. openapi.krx.co.kr → [서비스 신청] → [일반상품] 신청 완료?\n"
+            "  2. 인증키가 정확한지 확인\n"
+            "  3. 신청 후 승인까지 최대 1일 소요"
+        )
+
     resp.raise_for_status()
 
     data = resp.json()
