@@ -18,8 +18,12 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from krx_gold.scraper import get_gold_daily, get_gold_price_history, _latest_biz_day
+from krx_gold.excel_writer import save_cumulative_excel, normalize_dataframe
 
 import pandas as pd
+
+# 누적 저장 파일명 (한 파일에 계속 누적)
+CUMULATIVE_FILENAME = "KRX금시장_누적.xlsx"
 
 # API 키 저장 파일
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".krx_gold")
@@ -302,6 +306,7 @@ class KrxGoldApp:
                 self._log("")
 
                 df = get_gold_daily(trd_dd, api_key=api_key, log_fn=self._log)
+                df = normalize_dataframe(df)
                 self.last_df = df
 
                 if df.empty:
@@ -324,7 +329,9 @@ class KrxGoldApp:
                     start, end, api_key=api_key,
                     item_filter=item_filter, log_fn=self._log,
                 )
+                df = normalize_dataframe(df)
                 self.last_df = df
+                self.last_item = item_filter
 
                 if df.empty:
                     self._log("\n데이터가 없습니다.")
@@ -342,27 +349,24 @@ class KrxGoldApp:
             self._finish()
 
     def _show_stats(self, df):
-        for col in ["종가", "TDD_CLSPRC"]:
-            if col in df.columns:
-                prices = pd.to_numeric(df[col], errors="coerce").dropna()
-                if len(prices) > 1:
-                    self._log(f"\n{'=' * 50}")
-                    self._log(f"  기간 통계")
-                    self._log(f"{'=' * 50}")
-                    self._log(f"  최고가: {prices.max():>12,.0f}")
-                    self._log(f"  최저가: {prices.min():>12,.0f}")
-                    self._log(f"  평균가: {prices.mean():>12,.0f}")
-                    if prices.iloc[0] != 0:
-                        chg = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
-                        self._log(f"  기간 수익률: {chg:>+10.2f} %")
-                break
+        if "종가" in df.columns:
+            prices = pd.to_numeric(df["종가"], errors="coerce").dropna()
+            if len(prices) > 1:
+                self._log(f"\n{'=' * 50}")
+                self._log(f"  기간 통계")
+                self._log(f"{'=' * 50}")
+                self._log(f"  최고가: {prices.max():>12,.0f}")
+                self._log(f"  최저가: {prices.min():>12,.0f}")
+                self._log(f"  평균가: {prices.mean():>12,.0f}")
+                if prices.iloc[0] != 0:
+                    chg = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
+                    self._log(f"  기간 수익률: {chg:>+10.2f} %")
 
-        for col in ["거래량(g)", "ACC_TRDVOL"]:
-            if col in df.columns:
-                vols = pd.to_numeric(df[col], errors="coerce").dropna()
-                if len(vols) > 0:
-                    self._log(f"  총 거래량: {vols.sum():>10,.0f} g")
-                break
+        if "거래량" in df.columns:
+            vols = pd.to_numeric(df["거래량"], errors="coerce").dropna()
+            if len(vols) > 0:
+                self._log(f"  총 거래량: {vols.sum():>12,.0f} g")
+                self._log(f"  일평균 거래량: {vols.mean():>10,.0f} g")
 
     def _save_excel(self):
         if self.last_df is None or self.last_df.empty:
@@ -372,25 +376,34 @@ class KrxGoldApp:
         save_dir = self.save_dir_var.get()
         os.makedirs(save_dir, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        mode = self.mode_var.get()
-
-        if mode == "daily":
-            trd_dd = self.date_var.get().strip()
-            filename = f"KRX금시장_{trd_dd}_{timestamp}.xlsx"
-            sheet = f"금시세_{trd_dd}"
-        else:
-            start = self.start_var.get().strip()
-            end = self.end_var.get().strip()
-            filename = f"KRX금시장_{start}_{end}_{timestamp}.xlsx"
-            sheet = f"금시세_{start}_{end}"
-
-        filepath = os.path.join(save_dir, filename)
+        # 누적 저장: 항상 같은 파일명 사용
+        filepath = os.path.join(save_dir, CUMULATIVE_FILENAME)
 
         try:
-            self.last_df.to_excel(filepath, sheet_name=sheet[:31], index=False)
-            messagebox.showinfo("저장 완료", f"엑셀 파일이 저장되었습니다.\n\n{filepath}")
+            item_name = getattr(self, "last_item", None)
+            self._log(f"\n[엑셀 저장] {filepath}")
+
+            row_count = save_cumulative_excel(
+                self.last_df,
+                filepath=filepath,
+                sheet_name="금시세",
+                item_name=item_name,
+                log_fn=self._log,
+            )
+
+            self._log(f"  → 총 {row_count}행 저장됨 (누적, 차트 포함)")
+            messagebox.showinfo(
+                "저장 완료",
+                f"누적 엑셀에 저장되었습니다.\n\n"
+                f"파일: {filepath}\n"
+                f"누적 행 수: {row_count}행\n\n"
+                f"※ 같은 일자 데이터는 자동으로 중복 제거됩니다.\n"
+                f"※ 가격/거래량 그래프가 자동 생성됩니다.",
+            )
         except Exception as e:
+            import traceback
+            self._log(f"\n[저장 오류] {e}")
+            self._log(traceback.format_exc())
             messagebox.showerror("저장 오류", str(e))
 
 
