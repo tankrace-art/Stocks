@@ -186,9 +186,9 @@ class KrxGoldApp:
         path_frame = ttk.LabelFrame(self.root, text=" 저장 경로 ", padding=10)
         path_frame.pack(fill="x", padx=15, pady=5)
 
-        self.save_dir_var = tk.StringVar(
-            value=os.path.join(os.path.expanduser("~"), "Desktop")
-        )
+        # 기본 저장 경로 = 스크립트가 있는 폴더 (C:\Users\...\Documents\Stocks)
+        default_save_dir = os.path.dirname(os.path.abspath(__file__))
+        self.save_dir_var = tk.StringVar(value=default_save_dir)
         ttk.Entry(
             path_frame, textvariable=self.save_dir_var, width=50, font=("맑은 고딕", 10)
         ).pack(side="left", fill="x", expand=True, padx=(0, 10))
@@ -201,14 +201,15 @@ class KrxGoldApp:
         btn_frame.pack(fill="x", padx=15, pady=10)
 
         self.run_btn = ttk.Button(
-            btn_frame, text="  조회 시작  ", command=self._start,
+            btn_frame, text="  조회 + 자동 저장  ", command=self._start,
         )
         self.run_btn.pack(side="left")
 
-        self.save_btn = ttk.Button(
-            btn_frame, text="  엑셀 저장  ", command=self._save_excel, state="disabled",
-        )
-        self.save_btn.pack(side="left", padx=10)
+        ttk.Label(
+            btn_frame,
+            text=" ※ 조회 완료 시 자동으로 KRX금시장_누적.xlsx에 저장됩니다",
+            foreground="gray", font=("맑은 고딕", 9),
+        ).pack(side="left", padx=10)
 
         self.progress = ttk.Progressbar(btn_frame, mode="indeterminate", length=200)
         self.progress.pack(side="right")
@@ -301,7 +302,6 @@ class KrxGoldApp:
             return
         self.running = True
         self.run_btn.config(state="disabled")
-        self.save_btn.config(state="disabled")
         self.progress.start(10)
         self._clear_log()
         self.last_df = None
@@ -313,8 +313,6 @@ class KrxGoldApp:
         def _restore():
             self.running = False
             self.run_btn.config(state="normal")
-            if self.last_df is not None and not self.last_df.empty:
-                self.save_btn.config(state="normal")
             self.progress.stop()
         self.root.after(0, _restore)
 
@@ -368,6 +366,10 @@ class KrxGoldApp:
                     self._log(f"\n{format_df_for_display(df).to_string(index=False)}")
                     self._show_stats(df)
 
+            # ── 조회 성공 시 자동 저장 ──
+            if self.last_df is not None and not self.last_df.empty:
+                self._auto_save()
+
         except ValueError as e:
             self._log(f"\n[설정 오류] {e}")
         except Exception as e:
@@ -376,6 +378,37 @@ class KrxGoldApp:
             self._log(traceback.format_exc())
         finally:
             self._finish()
+
+    def _auto_save(self):
+        """조회 완료 후 자동으로 누적 엑셀 저장"""
+        save_dir = self.save_dir_var.get()
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+        except Exception as e:
+            self._log(f"\n[저장 오류] 폴더 생성 실패: {e}")
+            return
+
+        filepath = os.path.join(save_dir, CUMULATIVE_FILENAME)
+        self._log(f"\n[자동 저장] {filepath}")
+
+        try:
+            row_count = save_cumulative_excel(
+                self.last_df,
+                filepath=filepath,
+                sheet_name="금시세",
+                item_name=None,
+                log_fn=self._log,
+            )
+            self._log(f"  → 총 {row_count}행 저장됨 (누적, 차트 포함)")
+        except PermissionError:
+            self._log(
+                "  [저장 실패] 엑셀 파일이 열려 있습니다.\n"
+                "  Excel에서 파일을 닫고 다시 조회해주세요."
+            )
+        except Exception as e:
+            import traceback
+            self._log(f"  [저장 오류] {e}")
+            self._log(traceback.format_exc())
 
     def _show_stats(self, df):
         if "종가" in df.columns:
@@ -396,44 +429,6 @@ class KrxGoldApp:
             if len(vols) > 0:
                 self._log(f"  총 거래량: {vols.sum():>12,.0f} g")
                 self._log(f"  일평균 거래량: {vols.mean():>10,.0f} g")
-
-    def _save_excel(self):
-        if self.last_df is None or self.last_df.empty:
-            messagebox.showwarning("저장 오류", "저장할 데이터가 없습니다.")
-            return
-
-        save_dir = self.save_dir_var.get()
-        os.makedirs(save_dir, exist_ok=True)
-
-        # 누적 저장: 항상 같은 파일명 사용
-        filepath = os.path.join(save_dir, CUMULATIVE_FILENAME)
-
-        try:
-            self._log(f"\n[엑셀 저장] {filepath}")
-
-            # 데이터는 이미 조회 시점에 금 1kg으로 필터링됨 → 추가 필터 불필요
-            row_count = save_cumulative_excel(
-                self.last_df,
-                filepath=filepath,
-                sheet_name="금시세",
-                item_name=None,
-                log_fn=self._log,
-            )
-
-            self._log(f"  → 총 {row_count}행 저장됨 (누적, 차트 포함)")
-            messagebox.showinfo(
-                "저장 완료",
-                f"누적 엑셀에 저장되었습니다.\n\n"
-                f"파일: {filepath}\n"
-                f"누적 행 수: {row_count}행\n\n"
-                f"※ 같은 일자 데이터는 자동으로 중복 제거됩니다.\n"
-                f"※ 가격/거래량 그래프가 자동 생성됩니다.",
-            )
-        except Exception as e:
-            import traceback
-            self._log(f"\n[저장 오류] {e}")
-            self._log(traceback.format_exc())
-            messagebox.showerror("저장 오류", str(e))
 
 
 def main():
