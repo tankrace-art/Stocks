@@ -35,7 +35,10 @@ plt.rcParams["axes.unicode_minus"] = False
 USER_COLUMNS = ["일자", "종가", "대비", "등락률", "시가", "고가", "저가", "거래량", "거래대금"]
 
 # KRX API 응답 → 사용자 컬럼 매핑
+# scraper.py의 _clean_columns가 먼저 Korean으로 번역하는 경우도 있어서
+# 두 가지 형태(원본 영문 + 번역된 한글) 모두 처리한다.
 API_COL_MAP = {
+    # 원본 영문 컬럼
     "BAS_DD": "일자",
     "TRD_DD": "일자",
     "TDD_CLSPRC": "종가",
@@ -48,6 +51,12 @@ API_COL_MAP = {
     "ACC_TRDVAL": "거래대금",
     "ISU_NM": "종목명",
     "ISU_CD": "종목코드",
+    "ISU_SRT_CD": "종목코드",
+    # scraper.py가 먼저 번역한 경우 (재매핑)
+    "기준일": "일자",
+    "등락률(%)": "등락률",
+    "거래량(g)": "거래량",
+    "거래대금(원)": "거래대금",
 }
 
 

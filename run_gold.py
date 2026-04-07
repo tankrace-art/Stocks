@@ -382,14 +382,14 @@ class KrxGoldApp:
         filepath = os.path.join(save_dir, CUMULATIVE_FILENAME)
 
         try:
-            item_name = getattr(self, "last_item", None)
             self._log(f"\n[엑셀 저장] {filepath}")
 
+            # 데이터는 이미 조회 시점에 금 1kg으로 필터링됨 → 추가 필터 불필요
             row_count = save_cumulative_excel(
                 self.last_df,
                 filepath=filepath,
                 sheet_name="금시세",
-                item_name=item_name,
+                item_name=None,
                 log_fn=self._log,
             )
 
