@@ -178,23 +178,52 @@ def _call_api(url: str, params: dict, api_key: str, log_fn=None) -> pd.DataFrame
 
     resp.raise_for_status()
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except Exception as e:
+        if log_fn:
+            log_fn(f"  [응답 파싱 실패] {e}")
+            log_fn(f"  응답 원본: {resp.text[:500]}")
+        return pd.DataFrame()
 
     # 에러 처리
-    if "error" in data:
-        msg = data.get("error", {}).get("message", str(data))
+    if isinstance(data, dict) and "error" in data:
+        msg = data.get("error", {})
+        if isinstance(msg, dict):
+            msg = msg.get("message", str(data))
         raise RuntimeError(f"KRX API 에러: {msg}")
 
-    # 데이터 추출
-    rows = (
-        data.get("output")
-        or data.get("OutBlock_1")
-        or data.get("block1")
-        or []
-    )
+    # 데이터 추출: 다양한 응답 키 시도
+    rows = None
+    if isinstance(data, list):
+        rows = data
+    elif isinstance(data, dict):
+        for key in ["OutBlock_1", "output", "block1", "result", "data", "body"]:
+            if key in data and isinstance(data[key], list):
+                rows = data[key]
+                break
+        # 최상위에 다른 list 키가 있는지 탐색
+        if rows is None:
+            for key, val in data.items():
+                if isinstance(val, list) and val:
+                    rows = val
+                    if log_fn:
+                        log_fn(f"  응답 키 자동 감지: '{key}'")
+                    break
 
-    if not rows:
+    if rows is None or not rows:
+        if log_fn:
+            # 응답 구조 디버그 출력
+            if isinstance(data, dict):
+                log_fn(f"  응답 키: {list(data.keys())}")
+                log_fn(f"  응답 미리보기: {str(data)[:400]}")
+            else:
+                log_fn(f"  응답 타입: {type(data).__name__}")
+                log_fn(f"  응답 미리보기: {str(data)[:400]}")
         return pd.DataFrame()
+
+    if log_fn:
+        log_fn(f"  응답 수신: {len(rows)}건")
 
     df = pd.DataFrame(rows)
     df = _clean_columns(df)
