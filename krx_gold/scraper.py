@@ -51,7 +51,13 @@ COL_MAP = {
 }
 
 
-def get_gold_daily(bas_dd: str = None, api_key: str = "", log_fn=None) -> pd.DataFrame:
+def get_gold_daily(
+    bas_dd: str = None,
+    api_key: str = "",
+    log_fn=None,
+    auto_fallback: bool = True,
+    max_fallback_days: int = 7,
+) -> pd.DataFrame:
     """특정 일자의 KRX 금 전종목 시세 조회
 
     Parameters
@@ -62,6 +68,10 @@ def get_gold_daily(bas_dd: str = None, api_key: str = "", log_fn=None) -> pd.Dat
         KRX Open API 인증키.
     log_fn : callable, optional
         로그 출력 함수.
+    auto_fallback : bool
+        True면 데이터가 없을 때 전 영업일로 자동 재시도.
+    max_fallback_days : int
+        자동 재시도 최대 일수.
 
     Returns
     -------
@@ -79,6 +89,23 @@ def get_gold_daily(bas_dd: str = None, api_key: str = "", log_fn=None) -> pd.Dat
         log_fn(f"  API: {GOLD_DAILY_URL}")
 
     df = _call_api(GOLD_DAILY_URL, {"basDd": bas_dd}, api_key, log_fn)
+
+    # 데이터가 없으면 전 영업일로 자동 폴백
+    if df.empty and auto_fallback:
+        current = datetime.strptime(bas_dd, "%Y%m%d")
+        for i in range(1, max_fallback_days + 1):
+            current -= timedelta(days=1)
+            while current.weekday() >= 5:  # 주말 건너뛰기
+                current -= timedelta(days=1)
+            fallback_dd = current.strftime("%Y%m%d")
+            if log_fn:
+                log_fn(f"  [자동 폴백] {fallback_dd} 재시도...")
+            df = _call_api(GOLD_DAILY_URL, {"basDd": fallback_dd}, api_key, log_fn)
+            if not df.empty:
+                if log_fn:
+                    log_fn(f"  ✓ {fallback_dd} 데이터 획득")
+                break
+
     return df
 
 
