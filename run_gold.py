@@ -22,6 +22,33 @@ from krx_gold.excel_writer import save_cumulative_excel, normalize_dataframe
 
 import pandas as pd
 
+
+def format_df_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    """숫자 컬럼을 천단위 콤마 포함 문자열로 변환 (화면 표시용).
+
+    원본 DataFrame은 건드리지 않고 새 복사본을 반환한다.
+    """
+    if df is None or df.empty:
+        return df
+
+    display = df.copy()
+    # 정수로 표시할 컬럼
+    int_cols = ["종가", "대비", "시가", "고가", "저가", "거래량", "거래대금"]
+    # 소수점 2자리로 표시할 컬럼
+    float_cols = ["등락률", "등락률(%)"]
+
+    for col in display.columns:
+        if col in int_cols:
+            display[col] = pd.to_numeric(display[col], errors="coerce").apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else ""
+            )
+        elif col in float_cols:
+            display[col] = pd.to_numeric(display[col], errors="coerce").apply(
+                lambda x: f"{x:+.2f}" if pd.notna(x) else ""
+            )
+
+    return display
+
 # 누적 저장 파일명 (한 파일에 계속 누적)
 CUMULATIVE_FILENAME = "KRX금시장_누적.xlsx"
 
@@ -318,7 +345,7 @@ class KrxGoldApp:
                     self._log("(KRX 금시장은 평일에만 운영됩니다)")
                 else:
                     self._log(f"\n조회 완료\n")
-                    self._log(df.to_string(index=False))
+                    self._log(format_df_for_display(df).to_string(index=False))
 
             else:  # history
                 start = self.start_var.get().strip()
@@ -338,7 +365,7 @@ class KrxGoldApp:
                 if df.empty:
                     self._log("\n데이터가 없습니다.")
                 else:
-                    self._log(f"\n{df.to_string(index=False)}")
+                    self._log(f"\n{format_df_for_display(df).to_string(index=False)}")
                     self._show_stats(df)
 
         except ValueError as e:
