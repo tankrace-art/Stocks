@@ -86,14 +86,14 @@ class KrxGoldApp:
         mode_frame = ttk.LabelFrame(self.root, text=" 조회 모드 ", padding=10)
         mode_frame.pack(fill="x", padx=15, pady=5)
 
-        self.mode_var = tk.StringVar(value="daily")
+        self.mode_var = tk.StringVar(value="history")
         ttk.Radiobutton(
-            mode_frame, text="전종목 일별 시세", variable=self.mode_var,
-            value="daily", command=self._on_mode_change,
+            mode_frame, text="기간별 시세 추이 (금 1kg)", variable=self.mode_var,
+            value="history", command=self._on_mode_change,
         ).grid(row=0, column=0, padx=15)
         ttk.Radiobutton(
-            mode_frame, text="기간별 시세 추이", variable=self.mode_var,
-            value="history", command=self._on_mode_change,
+            mode_frame, text="특정일 시세", variable=self.mode_var,
+            value="daily", command=self._on_mode_change,
         ).grid(row=0, column=1, padx=15)
 
         # ── 입력 영역 ──
@@ -113,17 +113,14 @@ class KrxGoldApp:
             row=0, column=2, sticky="w", padx=5
         )
 
-        # 종목 필터
+        # 종목 (금 1kg 고정)
         ttk.Label(input_frame, text="종목:", font=("맑은 고딕", 11)).grid(
             row=1, column=0, sticky="w", pady=5
         )
-        self.item_var = tk.StringVar(value="전체")
-        self.item_combo = ttk.Combobox(
-            input_frame, textvariable=self.item_var,
-            values=["전체", "1Kg", "100g", "10g"], state="readonly", width=13,
-            font=("맑은 고딕", 11),
-        )
-        self.item_combo.grid(row=1, column=1, sticky="w", padx=(10, 5), pady=5)
+        ttk.Label(
+            input_frame, text="금 99.99 1kg (고정)",
+            font=("맑은 고딕", 11), foreground="#1f77b4",
+        ).grid(row=1, column=1, sticky="w", padx=(10, 5), pady=5)
 
         # 시작일
         ttk.Label(input_frame, text="시작일:", font=("맑은 고딕", 11)).grid(
@@ -210,12 +207,10 @@ class KrxGoldApp:
         mode = self.mode_var.get()
         if mode == "daily":
             self.date_entry.config(state="normal")
-            self.item_combo.config(state="disabled")
             self.start_entry.config(state="disabled")
             self.end_entry.config(state="disabled")
         else:
             self.date_entry.config(state="disabled")
-            self.item_combo.config(state="readonly")
             self.start_entry.config(state="normal")
             self.end_entry.config(state="normal")
 
@@ -299,30 +294,37 @@ class KrxGoldApp:
     def _run(self, api_key):
         try:
             mode = self.mode_var.get()
+            # 금 1kg만 필터 (미니금 제외)
+            item_filter = "1kg"
 
             if mode == "daily":
                 trd_dd = self.date_var.get().strip()
-                self._log(f"[KRX 금시장] {trd_dd} 전종목 시세 조회 중...")
+                self._log(f"[KRX 금시장] {trd_dd} 금 1kg 시세 조회 중...")
                 self._log("")
 
                 df = get_gold_daily(trd_dd, api_key=api_key, log_fn=self._log)
                 df = normalize_dataframe(df)
+
+                # 금 1kg만 필터
+                if not df.empty and "종목명" in df.columns:
+                    df = df[df["종목명"].str.contains("1kg", case=False, na=False)]
+                    df = df.reset_index(drop=True)
+
                 self.last_df = df
+                self.last_item = "금 1kg"
 
                 if df.empty:
                     self._log("\n데이터가 없습니다. 영업일인지 확인해주세요.")
                     self._log("(KRX 금시장은 평일에만 운영됩니다)")
                 else:
-                    self._log(f"\n총 {len(df)}개 종목 조회 완료\n")
+                    self._log(f"\n조회 완료\n")
                     self._log(df.to_string(index=False))
 
             else:  # history
                 start = self.start_var.get().strip()
                 end = self.end_var.get().strip()
-                item = self.item_var.get()
-                item_filter = None if item == "전체" else item
 
-                self._log(f"[KRX 금시장] 기간별 시세 추이 조회 중...")
+                self._log(f"[KRX 금시장] 금 1kg 기간별 시세 추이 조회 중...")
                 self._log("")
 
                 df = get_gold_price_history(
@@ -331,7 +333,7 @@ class KrxGoldApp:
                 )
                 df = normalize_dataframe(df)
                 self.last_df = df
-                self.last_item = item_filter
+                self.last_item = "금 1kg"
 
                 if df.empty:
                     self._log("\n데이터가 없습니다.")
