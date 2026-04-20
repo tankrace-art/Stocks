@@ -77,7 +77,9 @@ def calculate_investment_metrics(
     """
     bs = cross_tables.get("재무상태표")
     # 손익계산서 또는 포괄손익계산서 사용
-    inc = cross_tables.get("손익계산서") or cross_tables.get("포괄손익계산서")
+    inc = cross_tables.get("손익계산서")
+    if inc is None or inc.empty:
+        inc = cross_tables.get("포괄손익계산서")
     cf = cross_tables.get("현금흐름표")
 
     years = [str(y) for y in range(start_year, end_year + 1)]
