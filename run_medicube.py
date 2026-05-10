@@ -401,13 +401,14 @@ class MedicubeTrackerApp:
             subprocess.Popen(["xdg-open", OUTPUT_DIR])
 
     def _open_last_file(self):
-        if self._last_file and os.path.exists(self._last_file):
+        path = self._last_file or os.path.join(OUTPUT_DIR, "Medicube_트렌드_리포트.xlsx")
+        if path and os.path.exists(path):
             if sys.platform == "win32":
-                os.startfile(self._last_file)
+                os.startfile(path)
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", self._last_file])
+                subprocess.Popen(["open", path])
             else:
-                subprocess.Popen(["xdg-open", self._last_file])
+                subprocess.Popen(["xdg-open", path])
         else:
             messagebox.showinfo("안내", "아직 생성된 파일이 없습니다. 먼저 수집을 실행하세요.")
 

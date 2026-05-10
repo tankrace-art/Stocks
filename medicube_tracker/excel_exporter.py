@@ -708,14 +708,13 @@ def update_cumulative_tracker(all_data: dict, run_date: str):
 def export_daily_report(all_data: dict, output_path: str = None, history: dict = None) -> str:
     """
     Export all collected trend data to a formatted Excel file.
+    Overwrites a single fixed file (Medicube_트렌드_리포트.xlsx) each run.
     Returns the path to the saved file.
     """
     report_date = datetime.now().strftime("%Y-%m-%d")
-    report_time = datetime.now().strftime("%H%M%S")
 
     if output_path is None:
-        filename = f"Medicube_트렌드_{report_date}_{report_time}.xlsx"
-        output_path = os.path.join(OUTPUT_DIR, filename)
+        output_path = os.path.join(OUTPUT_DIR, "Medicube_트렌드_리포트.xlsx")
 
     wb = openpyxl.Workbook()
     # Remove default sheet
