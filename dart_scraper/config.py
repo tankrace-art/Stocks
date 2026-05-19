@@ -1,9 +1,12 @@
 """DART OpenAPI 설정"""
 
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 
