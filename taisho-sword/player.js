@@ -201,9 +201,14 @@ export class Player {
     if (input.keys.KeyS) { mx -= cfx; mz -= cfz; }
     if (input.keys.KeyD) { mx += crx; mz += crz; }
     if (input.keys.KeyA) { mx -= crx; mz -= crz; }
-    const ml = Math.hypot(mx, mz);
-    if (ml > 0) { mx /= ml; mz /= ml; }
-    this.moving = ml > 0;
+    // 터치 조이스틱(아날로그)
+    if (input.axisX || input.axisY) {
+      mx += cfx * input.axisY + crx * input.axisX;
+      mz += cfz * input.axisY + crz * input.axisX;
+    }
+    let ml = Math.hypot(mx, mz);
+    if (ml > 1) { mx /= ml; mz /= ml; ml = 1; }
+    this.moving = ml > 0.001;
 
     // 타이머
     this.invuln = Math.max(0, this.invuln - dt);
@@ -267,7 +272,7 @@ export class Player {
         move.copy(f).multiplyScalar(d.lunge * dt);
       }
     } else if (ml > 0) {
-      move.set(mx, 0, mz).multiplyScalar(MOVE_SPEED * dt);
+      move.set(mx, 0, mz).multiplyScalar(MOVE_SPEED * dt); // 아날로그 입력은 크기에 비례
       this.yaw = angleLerp(this.yaw, Math.atan2(mx, mz), 1 - Math.exp(-12 * dt));
     }
     // 넉백
@@ -301,6 +306,22 @@ export class Player {
     }
     // 공격 시작 시 카메라 정면으로 조준 (이동 입력 없으면)
     if (!this.moving || def.special) this.yaw = this.camYaw + Math.PI;
+    // 조준 보정: 정면 ±65° 안의 가까운 적 쪽으로 살짝 돌림 (터치 조작 배려)
+    if (!def.special && ctx.enemies) {
+      let best = null, bestD = def.range + 1.8;
+      for (const e of ctx.enemies) {
+        if (!e.targetable) continue;
+        const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d > bestD) continue;
+        const ang = Math.atan2(dx, dz);
+        let diff = ((ang - this.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+        if (diff < -Math.PI) diff += Math.PI * 2;
+        if (Math.abs(diff) > 1.15) continue;
+        best = ang; bestD = d;
+      }
+      if (best !== null) this.yaw = best;
+    }
     if (def.special) {
       ctx.effects.shockwave(this.pos, { color: 0x6aa8ff, radius: 3, life: 0.5, y: 0.1 });
       ctx.effects.burst(this.center, { count: 40, colors: [0x7fb8ff, 0xffffff, 0xffa040], speed: 3, life: 0.8, size: 0.45, gravity: 1.5, drag: 1, up: 2 });

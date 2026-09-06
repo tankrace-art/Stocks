@@ -2,7 +2,8 @@
 import { clamp } from './util.js';
 
 export class UI {
-  constructor() {
+  constructor({ touch = false } = {}) {
+    this.touch = touch;
     this.root = document.getElementById('ui');
     this.root.innerHTML = `
       <div id="hud">
@@ -109,11 +110,20 @@ export class UI {
   showScreen(kind, stats = {}) {
     const t = this.$('screen-title'), s = this.$('screen-sub'), b = this.$('screen-body'), c = this.$('screen-cta');
     this.screen.className = `screen show ${kind}`;
+    const act = this.touch ? '터치하여' : '클릭하여';
     if (kind === 'title') {
       t.textContent = '竹林の夜';
       s.textContent = '다이쇼 검극 — 밤을 베어라';
-      b.innerHTML = `
-        <p>안개 낀 대나무 숲. 요괴는 밤에만 움직이고, 새벽이 오면 재가 되어 흩어진다.<br>새벽까지 살아남거나, 숲의 주인 <b>黒鬼</b>를 베어라.</p>
+      const controls = this.touch ? `
+        <table class="controls">
+          <tr><td>왼쪽 화면</td><td>드래그로 이동 (가상 조이스틱)</td></tr>
+          <tr><td>오른쪽 화면</td><td>드래그로 시점 · 탭으로 베기</td></tr>
+          <tr><td>斬</td><td>기본 3연타</td></tr>
+          <tr><td>強</td><td>강공격</td></tr>
+          <tr><td>閃</td><td>대시 (무적 회피)</td></tr>
+          <tr><td>秘剣</td><td>秘剣・波焔 (게이지 충전 시)</td></tr>
+        </table>
+        <p class="tip">가로 화면을 권장합니다</p>` : `
         <table class="controls">
           <tr><td>W A S D</td><td>이동</td></tr>
           <tr><td>마우스</td><td>시점</td></tr>
@@ -122,27 +132,29 @@ export class UI {
           <tr><td>우클릭</td><td>강공격</td></tr>
           <tr><td>F / Space</td><td>秘剣・波焔 (게이지 충전 시)</td></tr>
         </table>`;
-      c.textContent = '클릭하여 시작';
+      b.innerHTML = `
+        <p>안개 낀 대나무 숲. 요괴는 밤에만 움직이고, 새벽이 오면 재가 되어 흩어진다.<br>새벽까지 살아남거나, 숲의 주인 <b>黒鬼</b>를 베어라.</p>${controls}`;
+      c.textContent = `${act} 시작`;
     } else if (kind === 'pause') {
       t.textContent = '一時停止';
       s.textContent = '숨을 고른다';
       b.innerHTML = '';
-      c.textContent = '클릭하여 계속';
+      c.textContent = `${act} 계속`;
     } else if (kind === 'victory') {
       t.textContent = '夜明け';
       s.textContent = '黒鬼를 베었다. 새벽빛이 대나무 숲을 물들인다.';
       b.innerHTML = this._stats(stats);
-      c.textContent = '클릭하여 다시';
+      c.textContent = `${act} 다시`;
     } else if (kind === 'survived') {
       t.textContent = '夜明け';
       s.textContent = '밤을 버텨냈다. 요괴들은 새벽과 함께 사라졌다.';
       b.innerHTML = this._stats(stats);
-      c.textContent = '클릭하여 다시';
+      c.textContent = `${act} 다시`;
     } else if (kind === 'defeat') {
       t.textContent = '散華';
       s.textContent = '검사는 대나무 숲에 쓰러졌다…';
       b.innerHTML = this._stats(stats);
-      c.textContent = '클릭하여 다시';
+      c.textContent = `${act} 다시`;
     }
   }
   _stats(s) {

@@ -64,8 +64,9 @@ function makeDotTexture(size = 64) {
 }
 
 export class Stage {
-  constructor(scene) {
+  constructor(scene, { mobile = false } = {}) {
     this.scene = scene;
+    this.mobile = mobile;
     this.time = 0;            // 경과 시간
     this.nightTime = 0;       // 밤 진행 시간
     this.dawnT = 0;           // 0(밤) → 1(새벽 완료)
@@ -94,7 +95,7 @@ export class Stage {
     this.moonLight.position.set(-18, 30, -12);
     this.moonLight.castShadow = true;
     const s = this.moonLight.shadow;
-    s.mapSize.set(2048, 2048);
+    s.mapSize.set(this.mobile ? 1024 : 2048, this.mobile ? 1024 : 2048);
     s.camera.near = 1; s.camera.far = 90;
     s.camera.left = -34; s.camera.right = 34; s.camera.top = 34; s.camera.bottom = -34;
     s.bias = -0.0008;
@@ -148,7 +149,7 @@ export class Stage {
 
   // ---------- 대나무 숲 (인스턴싱) ----------
   _buildBamboo() {
-    const COUNT = 900;
+    const COUNT = this.mobile ? 600 : 900;
     const stalkGeo = new THREE.CylinderGeometry(0.16, 0.22, 1, 6, 1);
     stalkGeo.translate(0, 0.5, 0);
     const stalkMat = new THREE.MeshLambertMaterial({ color: 0x5a8a3a, flatShading: true });
@@ -376,7 +377,7 @@ export class Stage {
     });
     this.mistPlanes = [];
     const geo = new THREE.PlaneGeometry(1, 1);
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < (this.mobile ? 16 : 26); i++) {
       const mesh = new THREE.Mesh(geo, this.mistMat);
       const r = rand(2, 34), a = rand(0, Math.PI * 2);
       mesh.position.set(Math.cos(a) * r, rand(0.2, 0.9), Math.sin(a) * r);

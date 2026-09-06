@@ -5,10 +5,13 @@ import { Player } from './player.js';
 import { EnemyManager } from './enemy.js';
 import { UI } from './ui.js';
 import { Effects } from './effects.js';
+import { isTouchDevice, setupTouch } from './touch.js';
+
+const TOUCH = isTouchDevice();
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, TOUCH ? 1.5 : 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -19,8 +22,9 @@ renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 260);
 
-const ui = new UI();
+const ui = new UI({ touch: TOUCH });
 let stage, player, enemies, effects;
+let touch = null;
 let state = 'title';   // title | playing | paused | ended
 let wasLocked = false;
 let elapsed = 0;
@@ -30,7 +34,11 @@ let endKind = null;
 const stats = { kills: 0, maxCombo: 0, specials: 0, time: 0 };
 
 // ---------- 입력 ----------
-const input = { keys: {}, mouseDX: 0, mouseDY: 0, light: false, heavy: false, special: false, dash: false };
+const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false };
+if (TOUCH) {
+  touch = setupTouch(input, { onPause: () => pause() });
+  document.body.classList.add('touch');
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
@@ -67,6 +75,7 @@ ui.screen.addEventListener('click', () => {
 });
 
 function lockPointer() {
+  if (TOUCH) return;
   try {
     const p = canvas.requestPointerLock({ unadjustedMovement: true });
     if (p && p.catch) p.catch(() => { try { canvas.requestPointerLock(); } catch (_) { /* 잠금 불가 환경 */ } });
@@ -78,7 +87,7 @@ function lockPointer() {
 // ---------- 월드 ----------
 function buildWorld() {
   effects = new Effects(scene);
-  stage = new Stage(scene);
+  stage = new Stage(scene, { mobile: TOUCH });
   player = new Player(scene);
   enemies = new EnemyManager(scene);
   enemies.onMessage = (t, s) => ui.message(t, s);
@@ -186,6 +195,7 @@ function frame() {
   input.light = input.heavy = input.special = input.dash = false;
 
   // HUD
+  if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); }
   ui.setHP(player.hp, player.maxHp);
   ui.setGauge(player.gauge, player.gaugeMax);
   ui.setCombo(player.combo, player.comboPop);
