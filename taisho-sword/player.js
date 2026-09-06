@@ -236,20 +236,22 @@ export function buildModel(ch) {
   } else if (pat === 'flames') {
     for (let i = 0; i < 5; i++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 4), mat(patColor)); f.position.set(-0.24 + i * 0.12, 0.76, -0.265); g.add(f); }
   } else if (pat === 'check' || pat === 'halfcheck') {
-    // 이치마츠 격자 (전통 문양)
+    // 이치마츠 격자 (전통 문양): 등판·옆판·앞판
     for (let r = 0; r < 4; r++) for (let col = 0; col < 4; col++) {
       if ((r + col) % 2) continue;
       if (pat === 'halfcheck' && col < 2) continue;
-      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.02), mat(patColor));
+      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.155, 0.02), mat(patColor));
       sq.position.set(-0.25 + col * 0.165, 0.75 + r * 0.155, -0.265); g.add(sq);
-      const sq2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.09), mat(patColor));
-      sq2.position.set(col < 2 ? -0.46 : 0.46, 0.75 + r * 0.155, -0.15 + (col % 2) * 0.1); g.add(sq2);
+      const sq2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.155, 0.095), mat(patColor));
+      sq2.position.set(col < 2 ? -0.46 : 0.46, 0.75 + r * 0.155, -0.16 + (col % 2) * 0.1); g.add(sq2);
+      if (col % 2 === 0 && pat === 'check') { const fr = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.155, 0.02), mat(patColor)); fr.position.set(col < 2 ? -0.22 : 0.22, 0.75 + r * 0.155, 0.23); g.add(fr); }
     }
   } else if (pat === 'uroko') {
-    // 우로코(비늘) 삼각 문양 (전통 문양)
+    // 우로코(비늘) 삼각 문양 (전통 문양): 등판 + 앞판
     for (let r = 0; r < 3; r++) for (let col = 0; col < 4; col++) {
-      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.13, 3), mat(patColor));
+      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.14, 3), mat(patColor));
       tri.position.set(-0.24 + col * 0.16 + (r % 2) * 0.08, 0.78 + r * 0.17, -0.265); tri.rotation.y = Math.PI / 6; g.add(tri);
+      if (col === 0 || col === 3) { const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 3), mat(patColor)); t2.position.set(col === 0 ? -0.22 : 0.22, 0.78 + r * 0.17, 0.23); t2.rotation.y = Math.PI / 6; g.add(t2); }
     }
   } else if (pat === 'dots') {
     for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), mat(patColor)); d.scale.z = 0.4; d.position.set(-0.22 + (i % 3) * 0.22, 0.8 + Math.floor(i / 3) * 0.3, -0.265); g.add(d); }
@@ -290,13 +292,19 @@ export function buildModel(ch) {
   const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.365, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.44), mat(C.hair)); hairCap.position.y = 0.03; hairCap.scale.set(1, 0.98, 0.96); headG.add(hairCap);
   const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.36, 14, 10, Math.PI * 0.55, Math.PI * 0.9, Math.PI * 0.3, Math.PI * 0.4), mat(C.hair)); hairBack.position.y = 0.02; hairBack.scale.set(1, 0.98, 0.96); headG.add(hairBack);
   const bangLens = L.bangs || [0.2, 0.28, 0.24, 0.3, 0.2];
+  const strandGeo = new THREE.CapsuleGeometry(0.05, 1, 3, 6); // 둥근 가닥 (y 스케일로 길이 조절)
   for (let i = 0; i < bangLens.length; i++) {
     const x = -0.24 + i * (0.48 / (bangLens.length - 1));
-    const len = bangLens[i] * 0.75;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.11, len, 0.09), mat(C.hair));
-    b.position.set(x, 0.33 - len / 2, 0.27); b.rotation.x = 0.22; b.rotation.z = (x) * 0.5;
+    const len = bangLens[i] * 0.8;
+    const b = new THREE.Mesh(strandGeo, mat(C.hair));
+    b.scale.set(1.1, len / 1.1, 0.9);
+    b.position.set(x, 0.34 - len / 2, 0.27); b.rotation.x = 0.25; b.rotation.z = (x) * 0.6;
     headG.add(b);
+    // 사이사이 짧은 가닥
+    if (i < bangLens.length - 1) { const b2 = new THREE.Mesh(strandGeo, mat(dark(C.hair, 0.1))); const l2 = len * 0.6; b2.scale.set(0.8, l2 / 1.1, 0.8); b2.position.set(x + 0.06, 0.36 - l2 / 2, 0.24); b2.rotation.x = 0.3; headG.add(b2); }
   }
+  // 정수리 가닥들 (볼륨)
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const tuft = new THREE.Mesh(strandGeo, mat(i % 2 ? C.hair : dark(C.hair, 0.08))); tuft.scale.set(1.2, 0.22, 1.0); tuft.position.set(Math.cos(a) * 0.2, 0.34, Math.sin(a) * 0.2 - 0.05); tuft.rotation.set(-Math.sin(a) * 1.2, 0, Math.cos(a) * 1.2); headG.add(tuft); }
   for (const s of [-1, 1]) {
     for (let k = 0; k < 3; k++) {
       const len = (L.longSide ? 0.5 : 0.3) * (1 - k * 0.18);
@@ -489,7 +497,7 @@ export class Player {
     const eq = this.progress ? sumEquipment(this.progress.equipped) : {};
     const g = (k) => eq[k] || 0;
     this.skill = {
-      dmgMul: s.dmg * (has('atk1') ? 1.15 : 1) * (1 + g('dmg')),
+      dmgMul: s.dmg * (has('atk1') ? 1.15 : 1) * (1 + g('dmg')) * 0.2, // 플레이어 공격력 1/5
       comboBonus: has('atk2'),
       heavyPlus: has('atk3'),
       regen: (has('def3') ? 0.8 : 0) + g('regen'),
@@ -502,7 +510,7 @@ export class Player {
       reduce: Math.min(0.6, g('reduce')),
     };
     const prevMax = this.maxHp || 0;
-    this.maxHp = Math.round(s.hp + (has('def1') ? 30 : 0) + g('hp'));
+    this.maxHp = Math.round(s.hp + (has('def1') ? 70 : 0) + g('hp') * 2);
     if (prevMax && this.maxHp > prevMax) this.hp = Math.min(this.maxHp, (this.hp || 0) + (this.maxHp - prevMax));
     if (this.hp > this.maxHp) this.hp = this.maxHp;
     this.moveSpeed = s.speed * (1 + g('speed'));
@@ -554,7 +562,7 @@ export class Player {
 
     // 점프 / 공중 낙하 베기
     if (input.jump && !this.airborne && !this.dashTime && !(this.attack && this.attack.def.special)) {
-      this.airborne = true; this.vy = 7.5; this.attack = null; this.queued = null; this.aim = null; this._hideAim();
+      this.airborne = true; this.vy = 8.2; this.attack = null; this.queued = null; this.aim = null; this._hideAim();
       ctx.effects.burst(this.pos.clone().setY(0.1), { count: 12, colors: [0xffffff, this.ch.colors.glow], speed: 2, life: 0.4, size: 0.4, gravity: 0, drag: 2 });
       this.events.push({ type: 'dash' });
     }
@@ -630,7 +638,7 @@ export class Player {
     // 회복약
     if (input.potion) {
       if (this.progress && this.hp < this.maxHp && this.progress.usePotion()) {
-        this.heal(POTION_HEAL);
+        this.heal(POTION_HEAL * 2.4);
         ctx.effects.burst(this.center, { count: 24, colors: [0xff6080, 0xffb0c0, 0xffffff], speed: 2, life: 0.8, size: 0.4, gravity: 2, drag: 1, up: 2 });
         this.events.push({ type: 'potion' });
       } else this.events.push({ type: 'potionFail' });

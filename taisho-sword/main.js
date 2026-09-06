@@ -155,7 +155,7 @@ function buildWorld() {
   player = new Player(scene, character, progress);
   const ps = stage.map.playerStart; player.pos.set(ps.x, 0, ps.z); player.yaw = Math.PI; player.camYaw = 0; player._camInit = false;
   const D = DIFFICULTIES[difficulty];
-  enemies = new EnemyManager(scene, { ...chapter, scale: { hp: chapter.scale.hp * D.hp, dmg: chapter.scale.dmg * D.dmg } });
+  enemies = new EnemyManager(scene, { ...chapter, scale: { hp: chapter.scale.hp * D.hp, dmg: chapter.scale.dmg * D.dmg }, diff: D.dmg });
   enemies.stage = stage;
   // 동료
   allies = [];

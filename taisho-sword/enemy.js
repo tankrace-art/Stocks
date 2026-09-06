@@ -33,6 +33,7 @@ export class Projectile {
     ctx.effects.emit({ pos: this.pos, vel: new THREE.Vector3(rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5)), life: 0.45, size: 0.45, color: this.color, drag: 2 });
     for (const p of [ctx.player, ...(ctx.allies || [])]) {
       if (!p.alive) continue;
+      if (p.airborne && p.pos.y > 0.3) continue; // 점프로 회피
       const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, dy = (p.pos.y + 1.0) - this.pos.y;
       if (Math.hypot(dx, dz) < this.radius + p.radius && Math.abs(dy) < 1.4) {
         p.takeDamage(this.dmg, this.pos, ctx.effects);
@@ -653,6 +654,7 @@ export class BossOni extends MeleeYokai {
       ctx.effects.shockwave(this.pos, { color: this.eyeColor, radius: 9, life: 0.9, y: 0.1 });
       ctx.effects.burst(this.center, { count: 60, colors: [this.eyeColor, 0x8a1030, 0xffffff], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
       this.stagger = 0; this.attackCooldown = 0.3;
+      this._transform(this.phase, ctx);
     }
     const t = this.stateT;
     if (this.state === 'chase') {
@@ -740,7 +742,7 @@ export class BossOni extends MeleeYokai {
         const fx = Math.sin(this.beamYaw), fz = Math.cos(this.beamYaw);
         for (let i = 0; i < 24; i++) ctx.effects.burst(new THREE.Vector3(this.pos.x + fx * i * 0.8, 1.2, this.pos.z + fz * i * 0.8), { count: 6, colors: [this.eyeColor, 0xffffff], speed: 3, life: 0.5, size: 0.6, gravity: 0, drag: 2 });
         ctx.effects.addShake(0.7); ctx.sfx && ctx.sfx('slam');
-        this._hitTargets(ctx, (tg) => { const rx = tg.pos.x - this.pos.x, rz = tg.pos.z - this.pos.z; const along = rx * fx + rz * fz; const lat = Math.abs(-rx * fz + rz * fx); return along > 0 && along < 20 && lat < 1.4 + tg.radius; }, Math.round(this.dmg * 1.1), this.pos);
+        this._hitTargets(ctx, (tg) => { if (tg.airborne && tg.pos.y > 0.3) return false; const rx = tg.pos.x - this.pos.x, rz = tg.pos.z - this.pos.z; const along = rx * fx + rz * fz; const lat = Math.abs(-rx * fz + rz * fx); return along > 0 && along < 20 && lat < 1.4 + tg.radius; }, Math.round(this.dmg * 1.1), this.pos);
         if (this.beamMesh) { this.beamMesh.material.color.setHex(0xffffff); this.beamMesh.material.opacity = 0.9; }
       }
       if (t >= 1.5) { this._endSkill(1.5, 2.4); }
@@ -773,6 +775,24 @@ export class BossOni extends MeleeYokai {
     } else if (this.state === 'summon') {
       if (t >= 0.8) this._endSkill(3.0, 4.0);
     }
+  }
+
+  // 페이즈 변신: 커지고, 뿔이 돋고, 오라가 짙어지고, 빨라진다
+  _transform(ph, ctx) {
+    this.scaleBase *= 1.14;
+    this.radius *= 1.14; this.height *= 1.14; this.attackRange *= 1.1; this.speed *= 1.15;
+    if (this.humanParts) {
+      const head = this.humanParts.head;
+      for (const s of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05 + ph * 0.02, 0.22 + ph * 0.12, 5), new THREE.MeshToonMaterial({ color: 0xe8e0d0 }));
+        horn.position.set(s * (0.14 + ph * 0.06), 0.34, 0.02 - ph * 0.04); horn.rotation.z = -s * (0.3 + ph * 0.15); head.add(horn);
+      }
+      // 핏줄: 붉게 물드는 피부·의상
+      for (const m of this.mats) if (m.m.color) m.m.color.lerp(new THREE.Color(this.eyeColor), 0.18);
+      if (this.aura) this.aura.opacity = 0.08 * ph;
+    }
+    ctx.effects.burst(this.center, { count: 80, colors: [this.eyeColor, 0xffffff, 0x200010], speed: 7, life: 1.2, size: 0.7, gravity: -1, drag: 1 });
+    ctx.sfx && ctx.sfx('roar');
   }
 
   _endSkill(a, b) {
@@ -828,6 +848,7 @@ export class BossOni extends MeleeYokai {
     this.eyeMat.emissive.setHex(telegraph ? 0xffffff : this.eyeColor);
     this.eyeMat.emissiveIntensity = telegraph ? 2 : 0.9;
     if (this.aura) { this.aura.opacity = telegraph ? 0.35 + 0.15 * Math.sin(performance.now() * 0.02) : (this.phase >= 2 ? 0.08 : 0); }
+    if (this.alive && this.state !== 'spawn' && this.state !== 'dead') { const s = damp(this.group.scale.x, this.scaleBase, 4, dt); this.group.scale.set(s, s, s); }
     if (this.humanParts) {
       animateFace(this.humanParts, dt);
       const P = this.humanParts;
@@ -853,6 +874,7 @@ export class EnemyManager {
     this.scale = (chapter && chapter.scale) || { hp: 1, dmg: 1 };
     this.bossCfg = (chapter && chapter.boss) || DEFAULT_BOSS;
     this.chapterId = (chapter && chapter.id) || 1;
+    this.diff = (chapter && chapter.diff) || 1;
     this.list = [];
     this.projectiles = [];
     this.waveIndex = -1;
@@ -893,8 +915,9 @@ export class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
-      if (this._ctx) this._normalize(this.boss, (this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12) * 3, this._ctx);
-      this.boss.dmg = Math.round(this.boss.dmg * 3);
+      const b = this.boss;
+      if (this._ctx) this._normalize(b, b.muzan ? 90 : b.upper ? 180 : b.lower ? 120 : 60, this._ctx);
+      b.dmg = Math.round((b.muzan ? 70 : b.upper ? 50 : b.lower ? 35 : 25) * (this.diff || 1));
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
@@ -995,7 +1018,7 @@ export class EnemyManager {
       if (Math.random() < 0.3) ctx.effects.emit({ pos: new THREE.Vector3(f.x + rand(-f.r, f.r) * 0.8, 0.2, f.z + rand(-f.r, f.r) * 0.8), vel: new THREE.Vector3(0, rand(0.5, 1.5), 0), life: 0.8, size: 0.4, color: f.color, drag: 1 });
       if (f.tick <= 0) {
         f.tick = 0.6;
-        for (const tg of [player, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - f.x, tg.pos.z - f.z) < f.r) tg.takeDamage(f.dmg, new THREE.Vector3(f.x, 0, f.z), ctx.effects);
+        for (const tg of [player, ...(ctx.allies || [])]) if (tg.alive && !(tg.airborne && tg.pos.y > 0.3) && Math.hypot(tg.pos.x - f.x, tg.pos.z - f.z) < f.r) tg.takeDamage(f.dmg, new THREE.Vector3(f.x, 0, f.z), ctx.effects);
       }
       if (f.life <= 0 || this.dissolved) { this.scene.remove(f.mesh); f.mesh.material.dispose(); this.fields.splice(i, 1); }
     }

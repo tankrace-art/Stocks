@@ -533,7 +533,7 @@ const CHARACTERS = [
     desc: '가족을 잃고 여동생을 되돌리기 위해 검을 든 소년. 물의 호흡을 쓰고, 궁지에서 아버지의 춤 히노카미 카구라를 펼친다.',
     colors: { kimono: 0x1a2a2a, hakama: 0x1b1f33, haori: 0x1e5a3a, scarf: 0xf1e9d6, hair: 0x4a1a1a, hairTip: 0xc03030, obi: 0xf0e6d2, glow: 0x40a0ff, eye: 0x8a1a1a, pattern: 0x0e0e12 },
     look: { pattern: 'check', earring: true, scar: true, bangs: [0.22, 0.3, 0.2, 0.32, 0.22], browTilt: 0.2, mouth: 'smile', ahoge: true },
-    stats: { hp: 125, speed: 6.3, dmg: 1.0, gauge: 1.05, dashCooldown: 0.7 },
+    stats: { hp: 300, speed: 6.3, dmg: 1.0, gauge: 1.05, dashCooldown: 0.7 },
     moves: { dive: '물의 호흡 제8형 · 폭포 항아리', l3: '물의 호흡 제1형 · 물면 베기', rush: '물의 호흡 제2형 · 물수레', heavy: '물의 호흡 제4형 · 치는 파도', flurry: '물의 호흡 제3형 · 유류무', sweep: '물의 호흡 제5형 · 간천의 자우', wave: '물의 호흡 제10형 · 생생유전', special: '히노카미 카구라 · 원무' },
     attackTheme: 'wave',
     special: { name: '히노카미 카구라 · 원무', theme: 'flame', c1: 0xff6a20, c2: 0xffd050, c3: 0xff2a10, range: 4.8, dmg: 62, waves: 1 },
@@ -544,7 +544,7 @@ const CHARACTERS = [
     desc: '겁이 많아 잠들어야 진짜 힘이 나오는 소년. 번개의 호흡 제1형 벽력일섬 하나를 극한까지 갈고닦았다.',
     colors: { kimono: 0x1a1a1a, hakama: 0x1a1a1a, haori: 0xf0c040, scarf: 0xffffff, hair: 0xf8d860, hairTip: 0xf08030, obi: 0x222222, glow: 0xfff070, eye: 0xc08020, pattern: 0xfff4d0 },
     look: { pattern: 'uroko', bangs: [0.3, 0.22, 0.34, 0.22, 0.3], browTilt: 0.5, longSide: true, mouth: 'worry', longBack: true },
-    stats: { hp: 100, speed: 7.4, dmg: 0.92, gauge: 1.1, dashCooldown: 0.4 },
+    stats: { hp: 240, speed: 7.4, dmg: 0.92, gauge: 1.1, dashCooldown: 0.4 },
     moves: { dive: '번개의 호흡 · 낙뢰', l3: '번개의 호흡 · 육연', rush: '번개의 호흡 제1형 · 벽력일섬', heavy: '번개의 호흡 · 팔연', flurry: '벽력일섬 · 연속', sweep: '번개의 호흡 제7형 · 화뢰신', wave: '번개의 호흡 · 원뢰', special: '벽력일섬 · 신속 (神速)' },
     attackTheme: 'lightning',
     special: { name: '벽력일섬 · 신속', theme: 'lightning', c1: 0xfff27a, c2: 0xffffff, c3: 0x9ad8ff, range: 4.2, dmg: 50, waves: 1, waveSpeed: 26 },
@@ -555,7 +555,7 @@ const CHARACTERS = [
     desc: '멧돼지 가면을 쓴 산의 아이. 톱니 날 두 자루를 휘두르는 스스로 만든 호흡, 짐승의 호흡을 쓴다.',
     colors: { kimono: 0x2a2a3a, hakama: 0x2a2a3a, haori: 0x6a5a48, scarf: 0x6a5a48, hair: 0x1a1a2a, obi: 0x6a5a3a, glow: 0xff9040, eye: 0x30c0a0, pattern: 0x8a7a5a },
     look: { boarMask: true, bladeScale: 1.35, twinBlades: true, serrated: true, bareChest: true, furPelt: true, bangs: [0.3, 0.3, 0.3, 0.3, 0.3] },
-    stats: { hp: 150, speed: 5.8, dmg: 1.3, gauge: 0.9, dashCooldown: 0.8 },
+    stats: { hp: 360, speed: 5.8, dmg: 1.3, gauge: 0.9, dashCooldown: 0.8 },
     moves: { dive: '짐승의 호흡 · 급강하 엄니', l3: '짐승의 호흡 삼의 엄니 · 물어뜯기', rush: '짐승의 호흡 일의 엄니 · 꿰뚫기', heavy: '짐승의 호흡 오의 엄니 · 미친 베기', flurry: '짐승의 호흡 이의 엄니 · 가르기', sweep: '짐승의 호흡 사의 엄니 · 잘게 찢기', wave: '짐승의 호흡 육의 엄니 · 난잡 물어뜯기', special: '짐승의 호흡 칠의 형 · 공간 식각' },
     attackTheme: 'quake',
     special: { name: '짐승의 호흡 칠의 형 · 공간 식각', theme: 'quake', c1: 0xffb060, c2: 0x8a6a40, c3: 0xff5030, range: 5.2, dmg: 70, waves: 1, waveSpeed: 12 },
@@ -583,7 +583,7 @@ const SKILLS = [
   { id: 'atk1', branch: 'atk', tier: 1, name: '호흡 숙련', desc: '모든 공격력 +15%', req: null },
   { id: 'atk2', branch: 'atk', tier: 2, name: '형(型)의 연계', desc: '연타 8 이상일 때 공격력 +25%', req: 'atk1' },
   { id: 'atk3', branch: 'atk', tier: 3, name: '흔적 발현 · 공격', desc: '강공격 범위 +40%, 넉백·경직 증가', req: 'atk2' },
-  { id: 'def1', branch: 'def', tier: 1, name: '전집중 · 상중', desc: '최대 체력 +30', req: null },
+  { id: 'def1', branch: 'def', tier: 1, name: '전집중 · 상중', desc: '최대 체력 +70', req: null },
   { id: 'def2', branch: 'def', tier: 2, name: '전집중 · 상중 · 심', desc: '대시 재사용 40% 단축, 대시 무적 연장', req: 'def1' },
   { id: 'def3', branch: 'def', tier: 3, name: '흔적 발현 · 신체', desc: '초당 체력 0.8 회복', req: 'def2' },
   { id: 'tec1', branch: 'tec', tier: 1, name: '투명한 세계', desc: '기술 게이지 충전 +50%', req: null },
@@ -2460,20 +2460,22 @@ function buildModel(ch) {
   } else if (pat === 'flames') {
     for (let i = 0; i < 5; i++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 4), mat(patColor)); f.position.set(-0.24 + i * 0.12, 0.76, -0.265); g.add(f); }
   } else if (pat === 'check' || pat === 'halfcheck') {
-    // 이치마츠 격자 (전통 문양)
+    // 이치마츠 격자 (전통 문양): 등판·옆판·앞판
     for (let r = 0; r < 4; r++) for (let col = 0; col < 4; col++) {
       if ((r + col) % 2) continue;
       if (pat === 'halfcheck' && col < 2) continue;
-      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.02), mat(patColor));
+      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.155, 0.02), mat(patColor));
       sq.position.set(-0.25 + col * 0.165, 0.75 + r * 0.155, -0.265); g.add(sq);
-      const sq2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.09), mat(patColor));
-      sq2.position.set(col < 2 ? -0.46 : 0.46, 0.75 + r * 0.155, -0.15 + (col % 2) * 0.1); g.add(sq2);
+      const sq2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.155, 0.095), mat(patColor));
+      sq2.position.set(col < 2 ? -0.46 : 0.46, 0.75 + r * 0.155, -0.16 + (col % 2) * 0.1); g.add(sq2);
+      if (col % 2 === 0 && pat === 'check') { const fr = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.155, 0.02), mat(patColor)); fr.position.set(col < 2 ? -0.22 : 0.22, 0.75 + r * 0.155, 0.23); g.add(fr); }
     }
   } else if (pat === 'uroko') {
-    // 우로코(비늘) 삼각 문양 (전통 문양)
+    // 우로코(비늘) 삼각 문양 (전통 문양): 등판 + 앞판
     for (let r = 0; r < 3; r++) for (let col = 0; col < 4; col++) {
-      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.13, 3), mat(patColor));
+      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.14, 3), mat(patColor));
       tri.position.set(-0.24 + col * 0.16 + (r % 2) * 0.08, 0.78 + r * 0.17, -0.265); tri.rotation.y = Math.PI / 6; g.add(tri);
+      if (col === 0 || col === 3) { const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 3), mat(patColor)); t2.position.set(col === 0 ? -0.22 : 0.22, 0.78 + r * 0.17, 0.23); t2.rotation.y = Math.PI / 6; g.add(t2); }
     }
   } else if (pat === 'dots') {
     for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), mat(patColor)); d.scale.z = 0.4; d.position.set(-0.22 + (i % 3) * 0.22, 0.8 + Math.floor(i / 3) * 0.3, -0.265); g.add(d); }
@@ -2514,13 +2516,19 @@ function buildModel(ch) {
   const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.365, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.44), mat(C.hair)); hairCap.position.y = 0.03; hairCap.scale.set(1, 0.98, 0.96); headG.add(hairCap);
   const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.36, 14, 10, Math.PI * 0.55, Math.PI * 0.9, Math.PI * 0.3, Math.PI * 0.4), mat(C.hair)); hairBack.position.y = 0.02; hairBack.scale.set(1, 0.98, 0.96); headG.add(hairBack);
   const bangLens = L.bangs || [0.2, 0.28, 0.24, 0.3, 0.2];
+  const strandGeo = new THREE.CapsuleGeometry(0.05, 1, 3, 6); // 둥근 가닥 (y 스케일로 길이 조절)
   for (let i = 0; i < bangLens.length; i++) {
     const x = -0.24 + i * (0.48 / (bangLens.length - 1));
-    const len = bangLens[i] * 0.75;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.11, len, 0.09), mat(C.hair));
-    b.position.set(x, 0.33 - len / 2, 0.27); b.rotation.x = 0.22; b.rotation.z = (x) * 0.5;
+    const len = bangLens[i] * 0.8;
+    const b = new THREE.Mesh(strandGeo, mat(C.hair));
+    b.scale.set(1.1, len / 1.1, 0.9);
+    b.position.set(x, 0.34 - len / 2, 0.27); b.rotation.x = 0.25; b.rotation.z = (x) * 0.6;
     headG.add(b);
+    // 사이사이 짧은 가닥
+    if (i < bangLens.length - 1) { const b2 = new THREE.Mesh(strandGeo, mat(dark(C.hair, 0.1))); const l2 = len * 0.6; b2.scale.set(0.8, l2 / 1.1, 0.8); b2.position.set(x + 0.06, 0.36 - l2 / 2, 0.24); b2.rotation.x = 0.3; headG.add(b2); }
   }
+  // 정수리 가닥들 (볼륨)
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const tuft = new THREE.Mesh(strandGeo, mat(i % 2 ? C.hair : dark(C.hair, 0.08))); tuft.scale.set(1.2, 0.22, 1.0); tuft.position.set(Math.cos(a) * 0.2, 0.34, Math.sin(a) * 0.2 - 0.05); tuft.rotation.set(-Math.sin(a) * 1.2, 0, Math.cos(a) * 1.2); headG.add(tuft); }
   for (const s of [-1, 1]) {
     for (let k = 0; k < 3; k++) {
       const len = (L.longSide ? 0.5 : 0.3) * (1 - k * 0.18);
@@ -2713,7 +2721,7 @@ class Player {
     const eq = this.progress ? sumEquipment(this.progress.equipped) : {};
     const g = (k) => eq[k] || 0;
     this.skill = {
-      dmgMul: s.dmg * (has('atk1') ? 1.15 : 1) * (1 + g('dmg')),
+      dmgMul: s.dmg * (has('atk1') ? 1.15 : 1) * (1 + g('dmg')) * 0.2, // 플레이어 공격력 1/5
       comboBonus: has('atk2'),
       heavyPlus: has('atk3'),
       regen: (has('def3') ? 0.8 : 0) + g('regen'),
@@ -2726,7 +2734,7 @@ class Player {
       reduce: Math.min(0.6, g('reduce')),
     };
     const prevMax = this.maxHp || 0;
-    this.maxHp = Math.round(s.hp + (has('def1') ? 30 : 0) + g('hp'));
+    this.maxHp = Math.round(s.hp + (has('def1') ? 70 : 0) + g('hp') * 2);
     if (prevMax && this.maxHp > prevMax) this.hp = Math.min(this.maxHp, (this.hp || 0) + (this.maxHp - prevMax));
     if (this.hp > this.maxHp) this.hp = this.maxHp;
     this.moveSpeed = s.speed * (1 + g('speed'));
@@ -2778,7 +2786,7 @@ class Player {
 
     // 점프 / 공중 낙하 베기
     if (input.jump && !this.airborne && !this.dashTime && !(this.attack && this.attack.def.special)) {
-      this.airborne = true; this.vy = 7.5; this.attack = null; this.queued = null; this.aim = null; this._hideAim();
+      this.airborne = true; this.vy = 8.2; this.attack = null; this.queued = null; this.aim = null; this._hideAim();
       ctx.effects.burst(this.pos.clone().setY(0.1), { count: 12, colors: [0xffffff, this.ch.colors.glow], speed: 2, life: 0.4, size: 0.4, gravity: 0, drag: 2 });
       this.events.push({ type: 'dash' });
     }
@@ -2854,7 +2862,7 @@ class Player {
     // 회복약
     if (input.potion) {
       if (this.progress && this.hp < this.maxHp && this.progress.usePotion()) {
-        this.heal(POTION_HEAL);
+        this.heal(POTION_HEAL * 2.4);
         ctx.effects.burst(this.center, { count: 24, colors: [0xff6080, 0xffb0c0, 0xffffff], speed: 2, life: 0.8, size: 0.4, gravity: 2, drag: 1, up: 2 });
         this.events.push({ type: 'potion' });
       } else this.events.push({ type: 'potionFail' });
@@ -3597,6 +3605,7 @@ class Projectile {
     ctx.effects.emit({ pos: this.pos, vel: new THREE.Vector3(rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5)), life: 0.45, size: 0.45, color: this.color, drag: 2 });
     for (const p of [ctx.player, ...(ctx.allies || [])]) {
       if (!p.alive) continue;
+      if (p.airborne && p.pos.y > 0.3) continue; // 점프로 회피
       const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, dy = (p.pos.y + 1.0) - this.pos.y;
       if (Math.hypot(dx, dz) < this.radius + p.radius && Math.abs(dy) < 1.4) {
         p.takeDamage(this.dmg, this.pos, ctx.effects);
@@ -4217,6 +4226,7 @@ class BossOni extends MeleeYokai {
       ctx.effects.shockwave(this.pos, { color: this.eyeColor, radius: 9, life: 0.9, y: 0.1 });
       ctx.effects.burst(this.center, { count: 60, colors: [this.eyeColor, 0x8a1030, 0xffffff], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
       this.stagger = 0; this.attackCooldown = 0.3;
+      this._transform(this.phase, ctx);
     }
     const t = this.stateT;
     if (this.state === 'chase') {
@@ -4304,7 +4314,7 @@ class BossOni extends MeleeYokai {
         const fx = Math.sin(this.beamYaw), fz = Math.cos(this.beamYaw);
         for (let i = 0; i < 24; i++) ctx.effects.burst(new THREE.Vector3(this.pos.x + fx * i * 0.8, 1.2, this.pos.z + fz * i * 0.8), { count: 6, colors: [this.eyeColor, 0xffffff], speed: 3, life: 0.5, size: 0.6, gravity: 0, drag: 2 });
         ctx.effects.addShake(0.7); ctx.sfx && ctx.sfx('slam');
-        this._hitTargets(ctx, (tg) => { const rx = tg.pos.x - this.pos.x, rz = tg.pos.z - this.pos.z; const along = rx * fx + rz * fz; const lat = Math.abs(-rx * fz + rz * fx); return along > 0 && along < 20 && lat < 1.4 + tg.radius; }, Math.round(this.dmg * 1.1), this.pos);
+        this._hitTargets(ctx, (tg) => { if (tg.airborne && tg.pos.y > 0.3) return false; const rx = tg.pos.x - this.pos.x, rz = tg.pos.z - this.pos.z; const along = rx * fx + rz * fz; const lat = Math.abs(-rx * fz + rz * fx); return along > 0 && along < 20 && lat < 1.4 + tg.radius; }, Math.round(this.dmg * 1.1), this.pos);
         if (this.beamMesh) { this.beamMesh.material.color.setHex(0xffffff); this.beamMesh.material.opacity = 0.9; }
       }
       if (t >= 1.5) { this._endSkill(1.5, 2.4); }
@@ -4337,6 +4347,24 @@ class BossOni extends MeleeYokai {
     } else if (this.state === 'summon') {
       if (t >= 0.8) this._endSkill(3.0, 4.0);
     }
+  }
+
+  // 페이즈 변신: 커지고, 뿔이 돋고, 오라가 짙어지고, 빨라진다
+  _transform(ph, ctx) {
+    this.scaleBase *= 1.14;
+    this.radius *= 1.14; this.height *= 1.14; this.attackRange *= 1.1; this.speed *= 1.15;
+    if (this.humanParts) {
+      const head = this.humanParts.head;
+      for (const s of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05 + ph * 0.02, 0.22 + ph * 0.12, 5), new THREE.MeshToonMaterial({ color: 0xe8e0d0 }));
+        horn.position.set(s * (0.14 + ph * 0.06), 0.34, 0.02 - ph * 0.04); horn.rotation.z = -s * (0.3 + ph * 0.15); head.add(horn);
+      }
+      // 핏줄: 붉게 물드는 피부·의상
+      for (const m of this.mats) if (m.m.color) m.m.color.lerp(new THREE.Color(this.eyeColor), 0.18);
+      if (this.aura) this.aura.opacity = 0.08 * ph;
+    }
+    ctx.effects.burst(this.center, { count: 80, colors: [this.eyeColor, 0xffffff, 0x200010], speed: 7, life: 1.2, size: 0.7, gravity: -1, drag: 1 });
+    ctx.sfx && ctx.sfx('roar');
   }
 
   _endSkill(a, b) {
@@ -4392,6 +4420,7 @@ class BossOni extends MeleeYokai {
     this.eyeMat.emissive.setHex(telegraph ? 0xffffff : this.eyeColor);
     this.eyeMat.emissiveIntensity = telegraph ? 2 : 0.9;
     if (this.aura) { this.aura.opacity = telegraph ? 0.35 + 0.15 * Math.sin(performance.now() * 0.02) : (this.phase >= 2 ? 0.08 : 0); }
+    if (this.alive && this.state !== 'spawn' && this.state !== 'dead') { const s = damp(this.group.scale.x, this.scaleBase, 4, dt); this.group.scale.set(s, s, s); }
     if (this.humanParts) {
       animateFace(this.humanParts, dt);
       const P = this.humanParts;
@@ -4417,6 +4446,7 @@ class EnemyManager {
     this.scale = (chapter && chapter.scale) || { hp: 1, dmg: 1 };
     this.bossCfg = (chapter && chapter.boss) || DEFAULT_BOSS;
     this.chapterId = (chapter && chapter.id) || 1;
+    this.diff = (chapter && chapter.diff) || 1;
     this.list = [];
     this.projectiles = [];
     this.waveIndex = -1;
@@ -4457,8 +4487,9 @@ class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
-      if (this._ctx) this._normalize(this.boss, (this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12) * 3, this._ctx);
-      this.boss.dmg = Math.round(this.boss.dmg * 3);
+      const b = this.boss;
+      if (this._ctx) this._normalize(b, b.muzan ? 90 : b.upper ? 180 : b.lower ? 120 : 60, this._ctx);
+      b.dmg = Math.round((b.muzan ? 70 : b.upper ? 50 : b.lower ? 35 : 25) * (this.diff || 1));
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
@@ -4559,7 +4590,7 @@ class EnemyManager {
       if (Math.random() < 0.3) ctx.effects.emit({ pos: new THREE.Vector3(f.x + rand(-f.r, f.r) * 0.8, 0.2, f.z + rand(-f.r, f.r) * 0.8), vel: new THREE.Vector3(0, rand(0.5, 1.5), 0), life: 0.8, size: 0.4, color: f.color, drag: 1 });
       if (f.tick <= 0) {
         f.tick = 0.6;
-        for (const tg of [player, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - f.x, tg.pos.z - f.z) < f.r) tg.takeDamage(f.dmg, new THREE.Vector3(f.x, 0, f.z), ctx.effects);
+        for (const tg of [player, ...(ctx.allies || [])]) if (tg.alive && !(tg.airborne && tg.pos.y > 0.3) && Math.hypot(tg.pos.x - f.x, tg.pos.z - f.z) < f.r) tg.takeDamage(f.dmg, new THREE.Vector3(f.x, 0, f.z), ctx.effects);
       }
       if (f.life <= 0 || this.dissolved) { this.scene.remove(f.mesh); f.mesh.material.dispose(); this.fields.splice(i, 1); }
     }
@@ -5420,7 +5451,7 @@ function buildWorld() {
   player = new Player(scene, character, progress);
   const ps = stage.map.playerStart; player.pos.set(ps.x, 0, ps.z); player.yaw = Math.PI; player.camYaw = 0; player._camInit = false;
   const D = DIFFICULTIES[difficulty];
-  enemies = new EnemyManager(scene, { ...chapter, scale: { hp: chapter.scale.hp * D.hp, dmg: chapter.scale.dmg * D.dmg } });
+  enemies = new EnemyManager(scene, { ...chapter, scale: { hp: chapter.scale.hp * D.hp, dmg: chapter.scale.dmg * D.dmg }, diff: D.dmg });
   enemies.stage = stage;
   // 동료
   allies = [];
