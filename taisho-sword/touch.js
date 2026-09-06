@@ -13,11 +13,15 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   layer.innerHTML = `
     <div id="stick"><div id="stick-base"></div><div id="stick-knob"></div></div>
     <div id="btns">
-      <button class="tb tb-special" data-act="special">비검</button>
       <button class="tb tb-heavy" data-act="heavy">강공</button>
       <button class="tb tb-dash" data-act="dash">대시</button>
       <button class="tb tb-light" data-act="light">베기</button>
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
+    </div>
+    <div id="tech-row">
+      <button class="tb tech" data-act="tech1"><small>기술</small><span id="tech1-label">제1형</span></button>
+      <button class="tb tech" data-act="tech2"><small>기술</small><span id="tech2-label">제3형</span></button>
+      <button class="tb tech tb-special" data-act="special"><small>오의</small><span id="tech3-label">비검</span></button>
     </div>
     <div id="top-btns">
       <button id="tb-menu" aria-label="장비/스킬">장비·스킬</button>
@@ -123,6 +127,12 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
       else if (!hintTimer) { hint.classList.add('show'); hintTimer = setTimeout(() => hint.classList.remove('show'), 5000); }
     },
     setSpecialReady(ready) { layer.querySelector('.tb-special').classList.toggle('ready', !!ready); },
+    setMoves(moves) {
+      const short = (s, d) => (s ? s.split('·').pop().trim() : d);
+      layer.querySelector('#tech1-label').textContent = short(moves && moves.l3, '마무리');
+      layer.querySelector('#tech2-label').textContent = short(moves && moves.heavy, '강공');
+      layer.querySelector('#tech3-label').textContent = short(moves && moves.special, '비검');
+    },
     setPotions(n) { layer.querySelector('#tb-potion-n').textContent = n; layer.querySelector('.tb-potion').classList.toggle('empty', n <= 0); },
     setSound(muted) { layer.querySelector('#tb-sound').textContent = muted ? '소리 꺼짐' : '소리 켜짐'; },
   };

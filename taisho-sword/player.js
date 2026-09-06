@@ -48,105 +48,175 @@ function mat(color, extra = {}) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 }
 
-// ---------- 모델 (프리미티브 조합, 캐릭터별 색·장식) ----------
-function buildModel(ch) {
+// ---------- 모델: 머리 큰 귀여운 비율(2.5등신), 표정·앞머리·무늬 하오리·주름 하카마 ----------
+const SKIN = 0xf3d3b3;
+export function buildModel(ch) {
   const C = ch.colors, L = ch.look || {};
   const g = new THREE.Group();
   const parts = {};
-  const skin = 0xe9c7a4;
+  const light = (hex, k = 0.25) => new THREE.Color(hex).lerp(new THREE.Color(0xffffff), k).getHex();
+  const dark = (hex, k = 0.35) => new THREE.Color(hex).lerp(new THREE.Color(0x000000), k).getHex();
 
-  const hakama = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.46, 0.9, 7), mat(C.hakama));
-  hakama.position.y = 0.47;
-  const footGeo = new THREE.BoxGeometry(0.16, 0.08, 0.28);
-  const footL = new THREE.Mesh(footGeo, mat(0x201a16)); footL.position.set(-0.14, 0.04, 0.05);
-  const footR = new THREE.Mesh(footGeo, mat(0x201a16)); footR.position.set(0.14, 0.04, 0.05);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62, 0.34), mat(C.kimono));
-  torso.position.y = 1.2;
-  const haori = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.16), mat(C.haori));
-  haori.position.set(0, 1.15, -0.14);
-  const obi = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.13, 0.38), mat(C.obi));
-  obi.position.y = 0.9;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 6), mat(skin));
-  neck.position.y = 1.55;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 9, 7), mat(skin));
-  head.position.y = 1.74;
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.235, 9, 7, 0, Math.PI * 2, 0, Math.PI * 0.52), mat(C.hair));
-  hair.position.y = 1.76;
-  g.add(hakama, footL, footR, torso, haori, obi, neck, head, hair);
+  // ---- 발: 짚신 + 흰 버선 ----
+  const footGeo = new THREE.BoxGeometry(0.2, 0.09, 0.32);
+  for (const sx of [-0.15, 0.15]) {
+    const foot = new THREE.Mesh(footGeo, mat(0xf0e8dc)); foot.position.set(sx, 0.06, 0.06);
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.34), mat(0x6a4a2a)); sole.position.set(sx, 0.02, 0.06);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.16), mat(0x8a1f1f)); strap.position.set(sx, 0.11, 0.1);
+    g.add(foot, sole, strap);
+    parts.feet = parts.feet || []; parts.feet.push(foot, sole, strap);
+  }
+  // ---- 하카마: 몸통 + 주름 ----
+  const hakama = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 0.78, 8), mat(C.hakama));
+  hakama.position.y = 0.45;
+  g.add(hakama);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const pleat = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.74, 0.07), mat(i % 2 ? light(C.hakama, 0.12) : dark(C.hakama, 0.2)));
+    pleat.position.set(Math.sin(a) * 0.42, 0.44, Math.cos(a) * 0.42);
+    pleat.rotation.y = a; pleat.rotation.x = Math.cos(a) * 0.18; pleat.rotation.z = -Math.sin(a) * 0.18;
+    g.add(pleat);
+  }
+  // ---- 몸통·오비·깃 ----
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.55, 0.36), mat(C.kimono)); torso.position.y = 1.06;
+  const obi = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.15, 0.4), mat(C.obi)); obi.position.y = 0.82;
+  const obiKnot = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.1), mat(light(C.obi, 0.2))); obiKnot.position.set(0, 0.82, -0.23);
+  g.add(torso, obi, obiKnot);
+  for (const s of [-1, 1]) {
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.03), mat(0xf6f0e4));
+    collar.position.set(s * 0.1, 1.24, 0.19); collar.rotation.z = -s * 0.7;
+    g.add(collar);
+  }
+  // ---- 하오리: 등판 + 옆판 + 무늬 ----
+  const haoriBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.64, 0.12), mat(C.haori)); haoriBack.position.set(0, 1.0, -0.2);
+  g.add(haoriBack);
+  for (const s of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.64, 0.38), mat(C.haori)); side.position.set(s * 0.37, 1.0, -0.02);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.05), mat(C.haori)); front.position.set(s * 0.22, 1.0, 0.2);
+    g.add(side, front);
+  }
+  const pat = L.pattern || 'plain';
+  const patColor = C.pattern !== undefined ? C.pattern : light(C.haori, 0.4);
+  if (pat === 'stripes') {
+    for (let i = 0; i < 4; i++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.13), mat(patColor)); st.position.set(0, 0.74 + i * 0.17, -0.2); g.add(st); }
+  } else if (pat === 'waves') {
+    for (let i = 0; i < 3; i++) for (const s of [-1, 0, 1]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.018, 4, 8, Math.PI), mat(patColor)); w.position.set(s * 0.2, 0.74 + i * 0.2, -0.265); g.add(w); }
+  } else if (pat === 'diamonds') {
+    for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.02), mat(patColor)); d.position.set(s * 0.17, 0.76 + i * 0.2, -0.265); d.rotation.z = Math.PI / 4; g.add(d); }
+  } else if (pat === 'flames') {
+    for (let i = 0; i < 5; i++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 4), mat(patColor)); f.position.set(-0.24 + i * 0.12, 0.76, -0.265); g.add(f); }
+  } else if (pat === 'leaves') {
+    for (let i = 0; i < 4; i++) { const lf = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), mat(patColor)); lf.scale.set(1, 1.6, 0.4); lf.position.set(-0.2 + i * 0.13, 0.78 + (i % 2) * 0.22, -0.265); lf.rotation.z = 0.5; g.add(lf); }
+  }
+  // 하오리 옷깃 테두리
+  for (const s of [-1, 1]) { const trim = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 0.06), mat(patColor)); trim.position.set(s * 0.14, 1.0, 0.21); g.add(trim); }
 
+  // ---- 목·머리 ----
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 6), mat(SKIN)); neck.position.y = 1.36; g.add(neck);
+  const headG = new THREE.Group(); headG.position.y = 1.7; g.add(headG); parts.head = headG;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), mat(SKIN)); head.scale.set(1, 0.95, 0.92); headG.add(head);
+  // 눈
+  parts.eyes = [];
+  for (const s of [-1, 1]) {
+    const white = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    white.scale.set(0.85, 1.15, 0.45); white.position.set(s * 0.13, 0.02, 0.28);
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 6), new THREE.MeshLambertMaterial({ color: C.eye || 0x3060a0, emissive: C.eye || 0x3060a0, emissiveIntensity: 0.25 }));
+    iris.scale.set(1, 1.3, 0.5); iris.position.set(s * 0.13, 0.0, 0.325);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), new THREE.MeshBasicMaterial({ color: 0x101018 })); pupil.position.set(s * 0.13, -0.01, 0.35);
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.02, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(s * 0.11, 0.035, 0.36);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.02), mat(C.hair)); brow.position.set(s * 0.13, 0.15, 0.3); brow.rotation.z = -s * (L.browTilt ?? 0.15);
+    const blush = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshLambertMaterial({ color: 0xffb0a8, transparent: true, opacity: 0.55 }));
+    blush.scale.set(1.3, 0.7, 0.4); blush.position.set(s * 0.23, -0.07, 0.25);
+    headG.add(white, iris, pupil, hl, brow, blush);
+    parts.eyes.push(white, iris, pupil, hl);
+  }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.022, 0.02), mat(0x9a4a4a)); mouth.position.set(0, -0.11, 0.32); headG.add(mouth);
+  // 머리카락: 캡 + 앞머리 + 옆머리
+  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.365, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), mat(C.hair)); hairCap.position.y = 0.02; hairCap.scale.set(1, 0.98, 0.96); headG.add(hairCap);
+  const bangLens = L.bangs || [0.2, 0.28, 0.24, 0.3, 0.2];
+  for (let i = 0; i < bangLens.length; i++) {
+    const x = -0.24 + i * (0.48 / (bangLens.length - 1));
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.11, bangLens[i], 0.1), mat(C.hair));
+    b.position.set(x, 0.24 - bangLens[i] / 2, 0.28); b.rotation.x = 0.18; b.rotation.z = (x) * 0.5;
+    headG.add(b);
+  }
+  for (const s of [-1, 1]) { const lock = new THREE.Mesh(new THREE.BoxGeometry(0.09, L.longSide ? 0.5 : 0.3, 0.13), mat(C.hair)); lock.position.set(s * 0.33, L.longSide ? -0.05 : 0.05, 0.08); headG.add(lock); }
+  if (L.ponytail) { const pt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.55, 6), mat(C.hair)); pt.position.set(0, -0.05, -0.36); pt.rotation.x = 0.55; headG.add(pt); parts.ponytail = pt; }
+  if (L.braid) { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.7, 6), mat(C.hair)); br.position.set(0.22, -0.2, -0.28); br.rotation.x = 0.35; headG.add(br); for (let i = 0; i < 3; i++) { const bead = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.02, 4, 8), mat(0xd9a640)); bead.position.set(0.22 + Math.sin(0.35) * 0, -0.05 - i * 0.2, -0.32 - i * 0.07); headG.add(bead); } }
   if (L.spikyHair) {
-    for (let i = 0; i < 6; i++) {
-      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 4), mat(C.hair));
-      const a = (i / 6) * Math.PI * 2;
-      spike.position.set(Math.cos(a) * 0.15, 1.95, Math.sin(a) * 0.15);
-      spike.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
-      g.add(spike);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.3, 4), mat(C.hair));
+      sp.position.set(Math.cos(a) * 0.24, 0.3, Math.sin(a) * 0.22);
+      sp.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+      headG.add(sp);
     }
   }
+  if (L.bun) { const bun = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), mat(C.hair)); bun.position.set(0, 0.28, -0.22); headG.add(bun); const tie = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 4, 10), mat(0xd9a640)); tie.position.copy(bun.position); tie.rotation.x = 0.8; headG.add(tie); }
+  // 모자류
   if (L.cap) {
-    const capBody = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.22, 0.1, 9), mat(0x0f1220));
-    capBody.position.y = 1.95;
-    const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.14), mat(0x0b0c14));
-    capVisor.position.set(0, 1.91, 0.24);
-    g.add(capBody, capVisor);
+    const capBody = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.34, 0.14, 12), mat(0x14172a)); capBody.position.y = 0.3;
+    const capBand = new THREE.Mesh(new THREE.CylinderGeometry(0.365, 0.365, 0.04, 12), mat(0xd9a640)); capBand.position.y = 0.25;
+    const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.18), mat(0x0b0c14)); capVisor.position.set(0, 0.24, 0.36); capVisor.rotation.x = 0.15;
+    headG.add(capBody, capBand, capVisor);
   }
-  if (L.kasa) {
-    const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.22, 10), mat(0xc9a86a));
-    kasa.position.y = 2.0;
-    g.add(kasa);
-  }
-  if (L.headband) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.07, 9), mat(0xf0e6d2));
-    band.position.y = 1.84;
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.35, 0.03), mat(0xf0e6d2));
-    tail.position.set(0.05, 1.7, -0.25); tail.rotation.x = 0.4;
-    g.add(band, tail);
-  }
-  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.075, 6, 10), mat(C.scarf));
-  scarf.position.y = 1.52; scarf.rotation.x = Math.PI / 2;
-  const scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.05), mat(C.scarf));
-  scarfTail.position.set(-0.12, 1.25, -0.25); scarfTail.rotation.x = 0.35;
+  if (L.kasa) { const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.3, 12), mat(0xd2b077)); kasa.position.y = 0.42; const rim = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.02, 4, 16), mat(0x8a6a3a)); rim.position.y = 0.28; rim.rotation.x = Math.PI / 2; headG.add(kasa, rim); }
+  if (L.headband) { const band = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.08, 12), mat(0xf0e6d2)); band.position.y = 0.16; const tail1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.03), mat(0xf0e6d2)); tail1.position.set(0.08, -0.05, -0.36); tail1.rotation.x = 0.4; tail1.rotation.z = 0.2; const tail2 = tail1.clone(); tail2.position.x = -0.06; tail2.rotation.z = -0.2; headG.add(band, tail1, tail2); }
+  if (L.earring) { for (const s of [-1, 1]) { const er = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.02), mat(C.pattern || 0xd9a640)); er.position.set(s * 0.34, -0.1, 0.05); headG.add(er); } }
+
+  // ---- 머플러 ----
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.085, 6, 12), mat(C.scarf)); scarf.position.y = 1.38; scarf.rotation.x = Math.PI / 2; g.add(scarf);
+  const scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.05), mat(C.scarf)); scarfTail.position.set(-0.14, 1.12, -0.3); scarfTail.rotation.x = 0.35; g.add(scarfTail);
   parts.scarfTail = scarfTail;
-  g.add(scarf, scarfTail);
 
-  const armGeo = new THREE.CylinderGeometry(0.075, 0.065, 0.56, 6);
-  armGeo.translate(0, -0.28, 0);
-  const leftArm = new THREE.Group(); leftArm.position.set(-0.34, 1.45, 0);
-  leftArm.add(new THREE.Mesh(armGeo, mat(C.kimono)));
-  const leftHand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), mat(skin)); leftHand.position.y = -0.58;
-  leftArm.add(leftHand);
-  leftArm.rotation.z = 0.2;
-  parts.leftArm = leftArm;
+  // ---- 팔 + 넓은 소매 ----
+  const armGeo = new THREE.CylinderGeometry(0.075, 0.07, 0.42, 6); armGeo.translate(0, -0.21, 0);
+  const makeArm = (s) => {
+    const arm = new THREE.Group(); arm.position.set(s * 0.36, 1.27, 0);
+    arm.add(new THREE.Mesh(armGeo, mat(C.kimono)));
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.34, 0.24), mat(C.haori)); sleeve.position.set(s * 0.02, -0.14, 0);
+    const sleeveTrim = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.05, 0.25), mat(patColor)); sleeveTrim.position.set(s * 0.02, -0.3, 0);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.085, 7, 6), mat(SKIN)); hand.position.y = -0.46;
+    arm.add(sleeve, sleeveTrim, hand);
+    arm.rotation.order = 'YXZ';
+    return arm;
+  };
+  const leftArm = makeArm(-1); leftArm.rotation.z = 0.2; parts.leftArm = leftArm;
+  const rightArm = makeArm(1); parts.rightArm = rightArm;
 
-  const rightArm = new THREE.Group(); rightArm.position.set(0.34, 1.45, 0);
-  rightArm.add(new THREE.Mesh(armGeo, mat(C.kimono)));
-  const rightHand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), mat(skin)); rightHand.position.y = -0.58;
-  rightArm.add(rightHand);
-  rightArm.rotation.order = 'YXZ';
-
+  // ---- 카타나 ----
   const bs = L.bladeScale || 1;
-  const katana = new THREE.Group();
-  katana.position.set(0, -0.58, 0);
+  const katana = new THREE.Group(); katana.position.set(0, -0.46, 0);
   const tsuka = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.3, 6), mat(0x2a1e1c)); tsuka.rotation.x = Math.PI / 2;
-  const tsukaWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.12, 6), mat(C.obi === 0x1a1a1a ? 0x8a1f1f : C.obi)); tsukaWrap.rotation.x = Math.PI / 2; tsukaWrap.position.z = -0.02;
-  const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.085 * bs, 0.085 * bs, 0.022, 8), mat(0x9a8a45)); tsuba.rotation.x = Math.PI / 2; tsuba.position.z = 0.16;
+  const wrapC = C.obi === 0x1a1a1a || C.obi === 0x222222 ? 0x8a1f1f : C.obi;
+  for (let i = 0; i < 3; i++) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.039, 0.039, 0.04, 6), mat(wrapC)); w.rotation.x = Math.PI / 2; w.position.z = -0.1 + i * 0.08; katana.add(w); }
+  const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.09 * bs, 0.09 * bs, 0.025, 8), mat(0xb09a4a)); tsuba.rotation.x = Math.PI / 2; tsuba.position.z = 0.16;
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0xe6edf5, metalness: 0.85, roughness: 0.22, emissive: C.glow, emissiveIntensity: 0.15 });
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.028 * bs, 0.07 * bs, 1.0 * bs), bladeMat); blade.position.z = 0.68 * bs;
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.035 * bs, 0.12, 4), bladeMat); tip.rotation.x = Math.PI / 2; tip.position.z = 1.24 * bs; tip.rotation.z = Math.PI / 4;
-  katana.add(tsuka, tsukaWrap, tsuba, blade, tip);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03 * bs, 0.075 * bs, 1.0 * bs), bladeMat); blade.position.z = 0.68 * bs;
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.012 * bs, 0.03 * bs, 1.0 * bs), new THREE.MeshBasicMaterial({ color: C.glow })); edge.position.set(0, 0.045 * bs, 0.68 * bs);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.037 * bs, 0.12, 4), bladeMat); tip.rotation.x = Math.PI / 2; tip.position.z = 1.24 * bs; tip.rotation.z = Math.PI / 4;
+  const tassel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), mat(wrapC)); tassel.position.set(0, -0.08, -0.16);
+  katana.add(tsuka, tsuba, blade, edge, tip, tassel);
   katana.rotation.x = -1.05;
   rightArm.add(katana);
-  parts.rightArm = rightArm; parts.katana = katana; parts.bladeMat = bladeMat;
+  parts.katana = katana; parts.bladeMat = bladeMat;
+  const saya = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 1.05 * bs, 6), mat(0x11111a)); saya.position.set(-0.22, 0.8, -0.16); saya.rotation.set(1.35, 0, 0.25);
+  const sayaRing = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 4, 8), mat(0xb09a4a)); sayaRing.position.set(-0.2, 0.9, -0.12); sayaRing.rotation.set(1.35, 0, 0.25);
 
-  const saya = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 1.05 * bs, 6), mat(0x11111a));
-  saya.position.set(-0.2, 0.85, -0.15);
-  saya.rotation.set(1.35, 0, 0.25);
-
-  g.add(leftArm, rightArm, saya);
+  g.add(leftArm, rightArm, saya, sayaRing);
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   parts.body = g;
-  parts.feet = [footL, footR];
+  parts.blinkT = rand(2, 5);
   return parts;
+}
+
+// 눈 깜빡임 (모델 공용)
+export function animateFace(parts, dt) {
+  parts.blinkT -= dt;
+  const closed = parts.blinkT < 0 && parts.blinkT > -0.12;
+  for (const e of parts.eyes) e.scale.y = closed ? 0.08 : (e.geometry.parameters.radius > 0.09 ? 1.15 : e.geometry.parameters.radius > 0.06 ? 1.3 : 1);
+  if (parts.blinkT < -0.12) parts.blinkT = rand(2.2, 5);
+  if (parts.ponytail) parts.ponytail.rotation.x = 0.55 + Math.sin(performance.now() * 0.004) * 0.12;
 }
 
 export class Player {
@@ -283,6 +353,9 @@ export class Player {
       if (!this.attack) this._startAttack(this.nextLight, ctx);
       else if (this.attack.def.next && this.attack.t >= this.attack.def.active[0]) this.queued = this.attack.def.next;
     }
+    // 기술 버튼: 마무리 형(연타 3타)을 바로 사용
+    if (input.tech1) { if (!this.attack) this._startAttack('light3', ctx); else if (this.attack.name !== 'light3' && !this.attack.def.special && this.attack.t >= this.attack.def.active[0]) this.queued = 'light3'; }
+    if (input.tech2) input.heavy = true;
     if (input.heavy) {
       if (!this.attack) this._startAttack('heavy', ctx);
       else if (!this.attack.def.heavy && !this.attack.def.special && this.attack.t >= this.attack.def.active[0]) this.queued = 'heavy';
@@ -305,7 +378,7 @@ export class Player {
         this.events.push({ type: 'potion' });
       } else this.events.push({ type: 'potionFail' });
     }
-    input.light = input.heavy = input.special = input.potion = false;
+    input.light = input.heavy = input.special = input.potion = input.tech1 = input.tech2 = false;
 
     // 이동
     const move = new THREE.Vector3();
@@ -377,8 +450,13 @@ export class Player {
       if (best !== null) this.yaw = best;
     }
     this.events.push({ type: 'swing', heavy: !!def.heavy, special: !!def.special });
+    // 기술명 연출 (유파 형)
+    const mv = this.ch.moves || {};
+    if (name === 'light3' && mv.l3) this.events.push({ type: 'move', name: mv.l3, tier: 1 });
+    if (name === 'heavy' && mv.heavy) this.events.push({ type: 'move', name: mv.heavy, tier: 2 });
     if (def.special) {
       const sp = this.ch.special;
+      this.events.push({ type: 'move', name: mv.special || sp.name, tier: 3 });
       ctx.effects.shockwave(this.pos, { color: sp.c1, radius: 3, life: 0.5, y: 0.1 });
       ctx.effects.burst(this.center, { count: 40, colors: [sp.c1, sp.c2, sp.c3], speed: 3, life: 0.8, size: 0.45, gravity: 1.5, drag: 1, up: 2 });
     }
@@ -395,11 +473,13 @@ export class Player {
     if (!a.fxDone && a.t >= as) {
       a.fxDone = true;
       const fx = d.fx;
-      ctx.effects.slashArc(this.pos, this.yaw, {
-        rIn: 0.5, rOut: d.special ? sp.range - 0.2 : (fx.rOut || d.range) * (heavyPlus ? 1.4 : 1), angle: Math.min(d.arc, Math.PI * 1.1), tilt: fx.tilt, roll: fx.roll,
-        color: d.special ? sp.c1 : fx.color, life: d.special ? 0.45 : 0.22, sweep: fx.sweep, y: fx.y,
-      });
+      const rOut = d.special ? sp.range - 0.2 : (fx.rOut || d.range) * (heavyPlus ? 1.4 : 1);
+      // 겹 궤적: 테마 색 + 흰색 잔상
+      ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut, angle: Math.min(d.arc, Math.PI * 1.1), tilt: fx.tilt, roll: fx.roll, color: sp.c1, life: d.special ? 0.45 : 0.26, sweep: fx.sweep, y: fx.y });
+      ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut: rOut * 0.85, angle: Math.min(d.arc, Math.PI * 1.1) * 0.8, tilt: fx.tilt, roll: fx.roll, color: 0xffffff, life: d.special ? 0.35 : 0.18, sweep: fx.sweep, y: fx.y + 0.05, opacity: 0.5 });
       if (d.special) ctx.effects.slashArc(this.pos, this.yaw + Math.PI, { rIn: 0.5, rOut: sp.range - 0.2, angle: Math.PI * 1.1, tilt: 0.15, color: sp.c2, life: 0.45, sweep: 1, y: 0.9 });
+      // 호흡 연출: 검격마다 테마 파티클
+      this._themeBurst(ctx, d.special ? 3 : d.heavy || a.name === 'light3' ? 2 : 1, fx.sweep, rOut);
     }
     if (a.t >= as && a.t <= ae) {
       this._hitCheck(a, ctx, range, heavyPlus);
@@ -420,6 +500,35 @@ export class Player {
       this.attack = null;
       this.comboResetTimer = 0.55;
       if (d.special) this.parts.body.rotation.y = 0;
+    }
+  }
+
+  // 검격 테마 연출 (물결/번개/지진/불꽃/바람) — 강도 1~3
+  _themeBurst(ctx, strength, sweep = 1, radius = 2.5) {
+    const sp = this.ch.special; const th = sp.theme;
+    const c = this.center; const f = this.forward;
+    const n = 10 * strength;
+    const fx = f.x, fz = f.z;
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n - 0.5) * 2.2 * (strength >= 3 ? 2.8 : 1);
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const dx = fx * ca - fz * sa, dz = fx * sa + fz * ca;
+      const r = rand(0.6, radius);
+      const p = new THREE.Vector3(c.x + dx * r, rand(0.4, 1.6), c.z + dz * r);
+      let v, color = i % 3 === 0 ? sp.c3 : i % 3 === 1 ? sp.c2 : sp.c1, life = 0.6, size = 0.4, gravity = 0, drag = 1.5;
+      if (th === 'wave') { v = new THREE.Vector3(dx * 2, rand(2, 4), dz * 2); gravity = -7; drag = 0.5; size = 0.3; life = 0.7; }
+      else if (th === 'lightning') { v = new THREE.Vector3(rand(-7, 7), rand(-2, 8), rand(-7, 7)); life = 0.22; size = 0.28; color = i % 2 ? 0xffffff : sp.c1; }
+      else if (th === 'quake') { p.y = 0.2; v = new THREE.Vector3(dx * 1.5, rand(3, 7), dz * 1.5); gravity = -10; size = 0.45; color = i % 2 ? sp.c2 : 0x8a6a40; }
+      else if (th === 'flame') { v = new THREE.Vector3(dx * 1.2 + rand(-0.5, 0.5), rand(2.5, 5.5), dz * 1.2 + rand(-0.5, 0.5)); gravity = 2.5; life = 0.8; size = 0.5; }
+      else { v = new THREE.Vector3(-dz * 3 * sweep + dx, rand(1, 3), dx * 3 * sweep + dz); drag = 0.8; life = 0.8; size = 0.35; }
+      ctx.effects.emit({ pos: p, vel: v, life, size, color, gravity, drag });
+    }
+    if (strength >= 2) {
+      if (th === 'wave') ctx.effects.shockwave(this.pos, { color: sp.c1, radius: radius * 0.9, life: 0.45, y: 0.12, opacity: 0.6 });
+      if (th === 'quake') ctx.effects.shockwave(this.pos, { color: sp.c2, radius: radius, life: 0.5, y: 0.08, opacity: 0.7, width: 0.35 });
+      if (th === 'lightning') ctx.effects.burst(c, { count: 5, colors: [0xffffff], speed: 0.5, life: 0.12, size: 2.2, gravity: 0, drag: 0 });
+      if (th === 'flame') ctx.effects.burst(c, { count: 14, colors: [sp.c1, sp.c2], speed: 2.5, life: 0.9, size: 0.7, gravity: 3, drag: 1, up: 3 });
+      if (th === 'wind') ctx.effects.shockwave(this.pos, { color: sp.c1, radius: radius * 1.1, life: 0.5, y: 0.6, opacity: 0.4, width: 0.12 });
     }
   }
 
@@ -533,7 +642,8 @@ export class Player {
     const killed = e.takeHit(d.dmg, dir, d.knock, d.stagger, ctx.effects);
     const hitPos = new THREE.Vector3(e.pos.x - dir.x * e.radius * 0.5, e.pos.y + e.height * 0.55, e.pos.z - dir.z * e.radius * 0.5);
     const sp = this.ch.special;
-    ctx.effects.sparks(hitPos, dir, d.special ? [sp.c1, sp.c2, 0xffffff] : undefined);
+    ctx.effects.sparks(hitPos, dir, [sp.c1, sp.c2, 0xffffff]);
+    ctx.effects.burst(hitPos, { count: 6, colors: [sp.c1, sp.c3], speed: 3, life: 0.4, size: 0.35, gravity: sp.theme === 'flame' ? 2 : -3, drag: 1.5 });
     this.gauge = Math.min(this.gaugeMax, this.gauge + (d.gauge || 0) * this.skill.gaugeMul);
     this.combo += 1;
     this.comboTimer = COMBO_WINDOW;
@@ -624,15 +734,13 @@ export class Player {
     body.rotation.x = damp(body.rotation.x, bodyTilt, 12, dt);
     body.rotation.y = this.attack && this.attack.def.special ? bodyYawOff : damp(body.rotation.y, bodyYawOff, 20, dt);
     body.position.y = bob;
-    const [fl, fr] = P.feet;
-    if (this.moving && !this.attack) {
-      fl.position.z = 0.05 + Math.sin(this.walkPhase) * 0.2;
-      fr.position.z = 0.05 - Math.sin(this.walkPhase) * 0.2;
-    } else {
-      fl.position.z = damp(fl.position.z, 0.05, 10, dt);
-      fr.position.z = damp(fr.position.z, 0.05, 10, dt);
+    for (let i = 0; i < P.feet.length; i++) {
+      const f = P.feet[i]; const left = i < 3;
+      const base = i % 3 === 2 ? 0.1 : 0.06;
+      f.position.z = this.moving && !this.attack ? base + (left ? 1 : -1) * Math.sin(this.walkPhase) * 0.2 : damp(f.position.z, base, 10, dt);
     }
     P.scarfTail.rotation.x = 0.35 + Math.sin(performance.now() * 0.004) * 0.15 + (this.moving ? 0.5 : 0);
+    animateFace(P, dt);
   }
 
   _animateDead(dt) {
