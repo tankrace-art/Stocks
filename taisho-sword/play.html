@@ -290,7 +290,8 @@ body.touch #move { right: 26%; top: 30%; }
 #story-lines { margin: 22px 0 8px; text-align: left; }
 #story-lines p { font-size: 16px; line-height: 1.9; color: var(--ink); margin: 0 0 10px; opacity: 0; animation: storyIn 0.9s ease forwards; letter-spacing: 0.04em; }
 @keyframes storyIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-#story-cta { cursor: pointer; opacity: 0; animation: storyIn 0.6s ease forwards, blink 1.2s ease-in-out infinite alternate; pointer-events: auto; padding: 10px; }
+#story-cta { cursor: pointer; opacity: 0; animation: storyIn 0.6s ease forwards, blink 1.2s ease-in-out infinite alternate; pointer-events: none; padding: 10px; }
+#story.show #story-cta { pointer-events: auto; }
 .card .head .eye { position: absolute; top: 11px; width: 5px; height: 7px; border-radius: 50%; background: var(--c2); box-shadow: 0 0 3px var(--c2); }
 .card .head .eye.l { left: 7px; } .card .head .eye.r { right: 7px; }
 .card .hat.hair { background: var(--c4); }
@@ -353,6 +354,8 @@ body.touch #minimap-wrap { left: 14px; top: 10px; width: 140px; } body.touch #mi
 .diff.on { border-color: var(--crimson); background: rgba(184,50,42,0.35); }
 
 #lives-hud { color: #ff6a80; letter-spacing: 0.1em; font-size: 14px; }
+
+.tb-jump { right: 108px; bottom: 112px; width: 64px; height: 64px; font-size: 18px; border-color: rgba(200, 255, 200, 0.6); }
 
 </style>
 <canvas id="game"></canvas>
@@ -528,10 +531,10 @@ const CHARACTERS = [
   {
     id: 'tanjiro', name: '탄지로', style: '물의 호흡 / 히노카미 카구라', role: '균형형',
     desc: '가족을 잃고 여동생을 되돌리기 위해 검을 든 소년. 물의 호흡을 쓰고, 궁지에서 아버지의 춤 히노카미 카구라를 펼친다.',
-    colors: { kimono: 0x1a3a3a, hakama: 0x1b1f33, haori: 0x1e4a3a, scarf: 0xf1e9d6, hair: 0x5a1e1e, obi: 0xf0e6d2, glow: 0x40a0ff, eye: 0x8a2a2a, pattern: 0x0e0e12 },
-    look: { pattern: 'check', earring: true, scar: true, bangs: [0.22, 0.3, 0.2, 0.32, 0.22], browTilt: 0.2 },
+    colors: { kimono: 0x1a2a2a, hakama: 0x1b1f33, haori: 0x1e5a3a, scarf: 0xf1e9d6, hair: 0x4a1a1a, hairTip: 0xc03030, obi: 0xf0e6d2, glow: 0x40a0ff, eye: 0x8a1a1a, pattern: 0x0e0e12 },
+    look: { pattern: 'check', earring: true, scar: true, bangs: [0.22, 0.3, 0.2, 0.32, 0.22], browTilt: 0.2, mouth: 'smile', ahoge: true },
     stats: { hp: 125, speed: 6.3, dmg: 1.0, gauge: 1.05, dashCooldown: 0.7 },
-    moves: { l3: '물의 호흡 제1형 · 물면 베기', rush: '물의 호흡 제2형 · 물수레', heavy: '물의 호흡 제4형 · 치는 파도', flurry: '물의 호흡 제3형 · 유류무', sweep: '물의 호흡 제5형 · 간천의 자우', wave: '물의 호흡 제10형 · 생생유전', special: '히노카미 카구라 · 원무' },
+    moves: { dive: '물의 호흡 제8형 · 폭포 항아리', l3: '물의 호흡 제1형 · 물면 베기', rush: '물의 호흡 제2형 · 물수레', heavy: '물의 호흡 제4형 · 치는 파도', flurry: '물의 호흡 제3형 · 유류무', sweep: '물의 호흡 제5형 · 간천의 자우', wave: '물의 호흡 제10형 · 생생유전', special: '히노카미 카구라 · 원무' },
     attackTheme: 'wave',
     special: { name: '히노카미 카구라 · 원무', theme: 'flame', c1: 0xff6a20, c2: 0xffd050, c3: 0xff2a10, range: 4.8, dmg: 62, waves: 1 },
     bars: { atk: 3, spd: 3, hp: 3, tec: 4 },
@@ -539,10 +542,10 @@ const CHARACTERS = [
   {
     id: 'zenitsu', name: '젠이츠', style: '번개의 호흡', role: '속도형',
     desc: '겁이 많아 잠들어야 진짜 힘이 나오는 소년. 번개의 호흡 제1형 벽력일섬 하나를 극한까지 갈고닦았다.',
-    colors: { kimono: 0xe8b23a, hakama: 0x1a1a1a, haori: 0xf0c040, scarf: 0xffffff, hair: 0xf2c84a, obi: 0x222222, glow: 0xfff070, eye: 0xc08020, pattern: 0xfff4d0 },
-    look: { pattern: 'uroko', bangs: [0.3, 0.22, 0.34, 0.22, 0.3], browTilt: 0.5, longSide: true },
+    colors: { kimono: 0x1a1a1a, hakama: 0x1a1a1a, haori: 0xf0c040, scarf: 0xffffff, hair: 0xf8d860, hairTip: 0xf08030, obi: 0x222222, glow: 0xfff070, eye: 0xc08020, pattern: 0xfff4d0 },
+    look: { pattern: 'uroko', bangs: [0.3, 0.22, 0.34, 0.22, 0.3], browTilt: 0.5, longSide: true, mouth: 'worry', longBack: true },
     stats: { hp: 100, speed: 7.4, dmg: 0.92, gauge: 1.1, dashCooldown: 0.4 },
-    moves: { l3: '번개의 호흡 · 육연', rush: '번개의 호흡 제1형 · 벽력일섬', heavy: '번개의 호흡 · 팔연', flurry: '벽력일섬 · 연속', sweep: '번개의 호흡 제7형 · 화뢰신', wave: '번개의 호흡 · 원뢰', special: '벽력일섬 · 신속 (神速)' },
+    moves: { dive: '번개의 호흡 · 낙뢰', l3: '번개의 호흡 · 육연', rush: '번개의 호흡 제1형 · 벽력일섬', heavy: '번개의 호흡 · 팔연', flurry: '벽력일섬 · 연속', sweep: '번개의 호흡 제7형 · 화뢰신', wave: '번개의 호흡 · 원뢰', special: '벽력일섬 · 신속 (神速)' },
     attackTheme: 'lightning',
     special: { name: '벽력일섬 · 신속', theme: 'lightning', c1: 0xfff27a, c2: 0xffffff, c3: 0x9ad8ff, range: 4.2, dmg: 50, waves: 1, waveSpeed: 26 },
     bars: { atk: 2, spd: 5, hp: 2, tec: 3 },
@@ -550,10 +553,10 @@ const CHARACTERS = [
   {
     id: 'inosuke', name: '이노스케', style: '짐승의 호흡', role: '중량형',
     desc: '멧돼지 가면을 쓴 산의 아이. 톱니 날 두 자루를 휘두르는 스스로 만든 호흡, 짐승의 호흡을 쓴다.',
-    colors: { kimono: 0x3a4a5a, hakama: 0x2a2a3a, haori: 0x3a4a5a, scarf: 0x8a7a5a, hair: 0x1a1a2a, obi: 0x6a5a3a, glow: 0xff9040, eye: 0x30c0a0, pattern: 0x8a7a5a },
-    look: { boarMask: true, bladeScale: 1.35, twinBlades: true, bangs: [0.3, 0.3, 0.3, 0.3, 0.3] },
+    colors: { kimono: 0x2a2a3a, hakama: 0x2a2a3a, haori: 0x6a5a48, scarf: 0x6a5a48, hair: 0x1a1a2a, obi: 0x6a5a3a, glow: 0xff9040, eye: 0x30c0a0, pattern: 0x8a7a5a },
+    look: { boarMask: true, bladeScale: 1.35, twinBlades: true, serrated: true, bareChest: true, furPelt: true, bangs: [0.3, 0.3, 0.3, 0.3, 0.3] },
     stats: { hp: 150, speed: 5.8, dmg: 1.3, gauge: 0.9, dashCooldown: 0.8 },
-    moves: { l3: '짐승의 호흡 삼의 엄니 · 물어뜯기', rush: '짐승의 호흡 일의 엄니 · 꿰뚫기', heavy: '짐승의 호흡 오의 엄니 · 미친 베기', flurry: '짐승의 호흡 이의 엄니 · 가르기', sweep: '짐승의 호흡 사의 엄니 · 잘게 찢기', wave: '짐승의 호흡 육의 엄니 · 난잡 물어뜯기', special: '짐승의 호흡 칠의 형 · 공간 식각' },
+    moves: { dive: '짐승의 호흡 · 급강하 엄니', l3: '짐승의 호흡 삼의 엄니 · 물어뜯기', rush: '짐승의 호흡 일의 엄니 · 꿰뚫기', heavy: '짐승의 호흡 오의 엄니 · 미친 베기', flurry: '짐승의 호흡 이의 엄니 · 가르기', sweep: '짐승의 호흡 사의 엄니 · 잘게 찢기', wave: '짐승의 호흡 육의 엄니 · 난잡 물어뜯기', special: '짐승의 호흡 칠의 형 · 공간 식각' },
     attackTheme: 'quake',
     special: { name: '짐승의 호흡 칠의 형 · 공간 식각', theme: 'quake', c1: 0xffb060, c2: 0x8a6a40, c3: 0xff5030, range: 5.2, dmg: 70, waves: 1, waveSpeed: 12 },
     bars: { atk: 5, spd: 2, hp: 5, tec: 2 },
@@ -1067,6 +1070,70 @@ const WORLD_NODES = [
 ];
 
 return { MAPS, inBounds, clampToBounds, boundsExtent, WORLD_NODES };
+})();
+
+// ===== demons.js =====
+const { DEMON_DESIGNS, getDemonDesign } = (() => {
+// demons.js — 혈귀(보스) 외형 정의: 사람형 도깨비 모델 옵션 (개인 플레이용 팬 디자인)
+// colors: kimono/hakama/haori/scarf/hair/obi/glow/eye/pattern, skin: 피부색
+// look: pattern, bangs, longSide, spikyHair, ponytail, bun, headband, kasa, cap, noSword, claws, horns, extraArms, boarMask, face(문양)
+const DEMON_DESIGNS = {
+  tede: { // 손 도깨비: 초록 피부, 무수한 팔
+    colors: { kimono: 0x3a4a2a, hakama: 0x2a3020, haori: 0x2a3020, scarf: 0x3a4a2a, hair: 0x1a1a10, obi: 0x1a1a10, glow: 0xffe040, eye: 0xffe040, pattern: 0x2a3020 },
+    skin: 0x7a9a5a, look: { noSword: true, claws: true, extraArms: 6, bangs: [0.1, 0.1, 0.1, 0.1, 0.1], face: 'rage', browTilt: 0.6 },
+  },
+  swamp: { // 늪 도깨비: 잿빛 피부, 뿔
+    colors: { kimono: 0x2a3a4a, hakama: 0x1a2a2a, haori: 0x1e2e38, scarf: 0x2a3a4a, hair: 0x101820, obi: 0x101820, glow: 0xff60a0, eye: 0xff60a0, pattern: 0x1e2e38 },
+    skin: 0x8a9aa0, look: { noSword: true, claws: true, horns: true, bangs: [0.3, 0.2, 0.3, 0.2, 0.3], face: 'slit' },
+  },
+  rui: { // 루이: 흰 머리, 흰 피부, 붉은 눈, 붉은 점무늬 흰 옷
+    colors: { kimono: 0xf4f4f8, hakama: 0xe8e8ee, haori: 0xf4f4f8, scarf: 0xf4f4f8, hair: 0xf0f0f4, obi: 0x3a2a4a, glow: 0xff3030, eye: 0xff3030, pattern: 0xd04040 },
+    skin: 0xf6f0f2, look: { noSword: true, claws: true, pattern: 'dots', bangs: [0.28, 0.32, 0.28, 0.32, 0.28], face: 'redlines', browTilt: -0.1 },
+  },
+  enmu: { // 엔무: 남보라 머리, 창백한 피부, 웃는 눈(손바닥 눈)
+    colors: { kimono: 0x2a2440, hakama: 0x1a1830, haori: 0x4a3a6a, scarf: 0x2a2440, hair: 0x6a5a9a, obi: 0x1a1830, glow: 0x60c0ff, eye: 0x60c0ff, pattern: 0x8a7ab0 },
+    skin: 0xe8dcea, look: { noSword: true, claws: true, longSide: true, bangs: [0.34, 0.24, 0.34, 0.24, 0.34], face: 'smile' },
+  },
+  akaza1: { // 아카자: 분홍 머리, 푸른 문신, 상의 탈의(피부색 몸)
+    colors: { kimono: 0xffd0b0, hakama: 0x2a4a8a, haori: 0xffd0b0, scarf: 0xffd0b0, hair: 0xff90b0, obi: 0x1a1a2a, glow: 0xffd040, eye: 0xffd040, pattern: 0x3060c0 },
+    skin: 0xffd0b0, look: { noSword: true, claws: false, spikyHair: true, pattern: 'lines', bangs: [0.2, 0.3, 0.2, 0.3, 0.2], face: 'tattoo', browTilt: 0.45 },
+  },
+  daki: { // 다키: 검은 머리, 흰 피부, 분홍 오비, 꽃 무늬
+    colors: { kimono: 0xf8e0e8, hakama: 0xf0c0d0, haori: 0xf8f0f4, scarf: 0xf8e0e8, hair: 0x101018, obi: 0xd04080, glow: 0xff5090, eye: 0xff5090, pattern: 0xff80b0 },
+    skin: 0xfaf0f0, look: { noSword: true, claws: true, ponytail: true, pattern: 'flowers', bangs: [0.3, 0.26, 0.3, 0.26, 0.3], face: 'makeup', browTilt: 0.2 },
+  },
+  gyutaro: { // 규타로: 초록빛 피부, 검은 반점, 낫
+    colors: { kimono: 0x3a4a3a, hakama: 0x2a2a2a, haori: 0x3a4a3a, scarf: 0x3a4a3a, hair: 0x1a2a1a, obi: 0x1a1a1a, glow: 0xa0ff40, eye: 0xa0ff40, pattern: 0x1a1a1a },
+    skin: 0x8aa08a, look: { noSword: true, claws: true, scythes: true, bangs: [0.34, 0.2, 0.34, 0.2, 0.34], face: 'patches', browTilt: 0.5 },
+  },
+  gyokko: { // 교쿠코: 푸른 피부, 항아리
+    colors: { kimono: 0x5a8ab0, hakama: 0x3a5a80, haori: 0x5a8ab0, scarf: 0x5a8ab0, hair: 0x2a3a6a, obi: 0x2a3a6a, glow: 0xff8040, eye: 0xff8040, pattern: 0x8ab0d0 },
+    skin: 0x8ab0d0, look: { noSword: true, claws: true, extraArms: 2, bun: true, bangs: [0.1, 0.1, 0.1, 0.1, 0.1], face: 'weird' },
+  },
+  hantengu: { // 한텐구: 노인, 혹, 회색
+    colors: { kimono: 0x3a2a4a, hakama: 0x2a1a3a, haori: 0x3a2a4a, scarf: 0x3a2a4a, hair: 0x9a9aa0, obi: 0x6a2a2a, glow: 0xffd040, eye: 0xffd040, pattern: 0x6a5a7a },
+    skin: 0x9a8a8a, look: { noSword: true, claws: true, horns: true, bangs: [0.1, 0.1, 0.1, 0.1, 0.1], face: 'sad', browTilt: -0.4 },
+  },
+  doma: { // 도우마: 흰 머리(무지개 끝), 무지개 눈, 화려한 하오리
+    colors: { kimono: 0xf8f0ff, hakama: 0xe0d0f0, haori: 0xd0a040, scarf: 0xf8f0ff, hair: 0xf0e8e0, obi: 0x8a4a4a, glow: 0xffa0c0, eye: 0xff80c0, pattern: 0xff4040 },
+    skin: 0xfaf4f4, look: { noSword: true, claws: true, longSide: true, pattern: 'diamonds', bangs: [0.3, 0.24, 0.3, 0.24, 0.3], face: 'rainbow', horns: true },
+  },
+  akaza2: { // 아카자 (무한성)
+    colors: { kimono: 0xffd0b0, hakama: 0x2a4a8a, haori: 0xffd0b0, scarf: 0xffd0b0, hair: 0xff90b0, obi: 0x1a1a2a, glow: 0xffd040, eye: 0xffd040, pattern: 0x3060c0 },
+    skin: 0xffd0b0, look: { noSword: true, spikyHair: true, pattern: 'lines', bangs: [0.2, 0.3, 0.2, 0.3, 0.2], face: 'tattoo', browTilt: 0.45 },
+  },
+  kokushibo: { // 코쿠시보: 긴 검은 머리, 여섯 눈, 붉은 무늬, 검
+    colors: { kimono: 0x3a2a3a, hakama: 0x2a1a2a, haori: 0x2a1a2a, scarf: 0x3a2a3a, hair: 0x101010, obi: 0x6a2a2a, glow: 0xff4040, eye: 0xff4040, pattern: 0xc03030 },
+    skin: 0xe8d8d0, look: { claws: false, ponytail: true, longSide: true, bladeScale: 1.2, pattern: 'flames', bangs: [0.22, 0.3, 0.22, 0.3, 0.22], face: 'sixeyes', browTilt: 0.3 },
+  },
+  muzan: { // 무잔: 검은 머리, 흰 피부, 붉은 눈(세로 동공), 검은 양복(다이쇼 신사)
+    colors: { kimono: 0x14141c, hakama: 0x14141c, haori: 0x1a1a24, scarf: 0xf8f8f8, hair: 0x0a0a10, obi: 0x2a2a34, glow: 0xff2040, eye: 0xff2040, pattern: 0x3a3a48 },
+    skin: 0xf6f0f0, look: { noSword: true, claws: true, cap: true, pattern: 'stripes', bangs: [0.26, 0.22, 0.26, 0.22, 0.26], face: 'slit', browTilt: 0.3 },
+  },
+};
+const getDemonDesign = (id) => DEMON_DESIGNS[id] || null;
+
+return { DEMON_DESIGNS, getDemonDesign };
 })();
 
 // ===== audio.js =====
@@ -2245,15 +2312,34 @@ function makeFaceTexture(ch, closed = false) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
   const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
-  g.fillStyle = hex(SKIN); g.fillRect(0, 0, W, H);
+  g.fillStyle = hex(ch.skin || SKIN); g.fillRect(0, 0, W, H);
   const cx = W * 0.25, ey = H * 0.47, gap = 30, ew = 26, eh = 22;
   const iris = hex(ch.colors.eye || 0x3060a0), hair = hex(ch.colors.hair);
   const tilt = ch.look && ch.look.browTilt !== undefined ? ch.look.browTilt : 0.15;
+  const face = (ch.look && ch.look.face) || '';
+  // 혈귀 문양 (눈 아래에 그려 눈이 위로 덮음)
+  if (face === 'tattoo') { g.strokeStyle = '#3060c0'; g.lineWidth = 6; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 14, ey + 70); g.lineTo(cx + s * 40, ey - 10); g.lineTo(cx + s * 30, ey - 60); g.stroke(); } g.beginPath(); g.moveTo(cx - 20, ey + 90); g.lineTo(cx + 20, ey + 90); g.stroke(); }
+  if (face === 'redlines') { g.strokeStyle = '#d04040'; g.lineWidth = 4; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * 34, ey + 30); g.lineTo(cx + s * 46, ey + 78); g.stroke(); } }
+  if (face === 'patches') { g.fillStyle = 'rgba(20,30,20,0.7)'; for (const [x, y, r] of [[cx - 42, ey + 20, 14], [cx + 38, ey + 50, 12], [cx - 10, ey + 84, 10], [cx + 44, ey - 30, 9]]) { g.beginPath(); g.ellipse(x, y, r, r * 0.7, 0.4, 0, Math.PI * 2); g.fill(); } }
+  if (face === 'makeup') { g.fillStyle = 'rgba(220,60,120,0.5)'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(cx + s * 30, ey - 6, 36, 28, 0, 0, Math.PI * 2); g.fill(); } }
+  if (face === 'sixeyes') { for (const s of [-1, 1]) for (const dy of [-34, 34]) { g.fillStyle = '#fff'; g.beginPath(); g.ellipse(cx + s * 30, ey + dy, 18, 12, 0, 0, Math.PI * 2); g.fill(); g.fillStyle = '#ff4040'; g.beginPath(); g.ellipse(cx + s * 30, ey + dy, 9, 10, 0, 0, Math.PI * 2); g.fill(); g.fillStyle = '#200'; g.fillRect(cx + s * 30 - 2, ey + dy - 9, 4, 18); } g.strokeStyle = '#c03030'; g.lineWidth = 5; g.beginPath(); g.moveTo(cx - 50, ey + 100); g.lineTo(cx + 50, ey + 100); g.stroke(); }
+  if (face === 'weird') { g.fillStyle = '#ff8040'; for (const [x, y] of [[cx - 50, ey - 40], [cx + 50, ey - 40], [cx, ey + 80]]) { g.beginPath(); g.ellipse(x, y, 12, 14, 0, 0, Math.PI * 2); g.fill(); } }
   for (const s of [-1, 1]) {
     const x = cx + s * gap;
-    if (closed) {
+    if (closed || face === 'smile') {
       g.strokeStyle = '#3a2a2a'; g.lineWidth = 4; g.lineCap = 'round';
       g.beginPath(); g.arc(x, ey + 6, ew * 0.9, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+    } else if (face === 'slit' || face === 'rage') {
+      g.fillStyle = face === 'slit' ? '#ffd0d0' : '#ffffff'; g.beginPath(); g.ellipse(x, ey, ew, eh * 0.85, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = iris; g.beginPath(); g.ellipse(x, ey, ew * 0.62, eh * 0.7, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#100000'; g.beginPath(); g.ellipse(x, ey, 3.5, eh * 0.62, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#2a1e22'; g.lineWidth = 5; g.beginPath(); g.ellipse(x, ey, ew + 1, eh * 0.85 + 1, 0, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+    } else if (face === 'rainbow') {
+      g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, 0, Math.PI * 2); g.fill();
+      const cols = ['#ff4040', '#ffa040', '#ffe040', '#40c040', '#4080ff', '#8040c0'];
+      for (let i = cols.length - 1; i >= 0; i--) { g.fillStyle = cols[i]; g.beginPath(); g.ellipse(x, ey + 2, ew * 0.62 * (i + 1) / cols.length, eh * 0.86 * (i + 1) / cols.length, 0, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = '#101018'; g.beginPath(); g.ellipse(x, ey + 3, 4, 6, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#2a1e22'; g.lineWidth = 5; g.beginPath(); g.ellipse(x, ey, ew + 1, eh + 1, 0, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
     } else {
       // 흰자 (아몬드형)
       g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, 0, Math.PI * 2); g.fill();
@@ -2266,10 +2352,18 @@ function makeFaceTexture(ch, closed = false) {
       // 하이라이트
       g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(x - s * 7, ey - 7, 6, 7, 0, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.ellipse(x + s * 6, ey + 8, 3, 3.5, 0, 0, Math.PI * 2); g.fill();
-      // 위 속눈썹 라인
-      g.strokeStyle = '#2a1e22'; g.lineWidth = 5; g.lineCap = 'round';
-      g.beginPath(); g.ellipse(x, ey, ew + 1, eh + 1, 0, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
-      g.lineWidth = 2.5; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+      // 홍채 안 음영 링 + 작은 반사
+      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, ey + 2, ew * 0.6, eh * 0.84, 0, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.55)'; g.beginPath(); g.ellipse(x + s * 2, ey + 12, ew * 0.3, 3, 0, 0, Math.PI * 2); g.fill();
+      // 위 속눈썹 라인 (굵게) + 바깥쪽 속눈썹
+      g.strokeStyle = '#2a1e22'; g.lineWidth = 6; g.lineCap = 'round';
+      g.beginPath(); g.ellipse(x, ey, ew + 1, eh + 1, 0, Math.PI * 1.06, Math.PI * 1.94); g.stroke();
+      g.lineWidth = 3; g.beginPath(); g.moveTo(x + s * (ew + 1), ey - 4); g.lineTo(x + s * (ew + 9), ey - 12); g.stroke();
+      g.beginPath(); g.moveTo(x + s * (ew - 4), ey - 12); g.lineTo(x + s * (ew + 3), ey - 20); g.stroke();
+      // 아래 속눈썹 (얇게)
+      g.lineWidth = 2; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, Math.PI * 0.2, Math.PI * 0.8); g.stroke();
+      // 쌍꺼풀 라인
+      g.strokeStyle = 'rgba(80,50,50,0.5)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, ey - 5, ew + 2, eh + 4, 0, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
     }
     // 눈썹
     g.strokeStyle = hair; g.lineWidth = 5; g.lineCap = 'round';
@@ -2277,9 +2371,13 @@ function makeFaceTexture(ch, closed = false) {
     // 볼터치
     g.fillStyle = 'rgba(255,140,140,0.32)'; g.beginPath(); g.ellipse(x + s * 22, ey + 38, 18, 8, 0, 0, Math.PI * 2); g.fill();
   }
-  // 입
+  // 입 (캐릭터별)
+  const mouth = (ch.look && ch.look.mouth) || 'smile';
   g.strokeStyle = '#a04848'; g.lineWidth = 3; g.lineCap = 'round';
-  g.beginPath(); g.arc(cx, ey + 56, 8, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+  if (mouth === 'grin') { g.fillStyle = '#5a2020'; g.beginPath(); g.ellipse(cx, ey + 58, 12, 7, 0, 0, Math.PI); g.fill(); g.fillStyle = '#fff'; g.fillRect(cx - 9, ey + 58, 18, 3); }
+  else if (mouth === 'worry') { g.beginPath(); g.moveTo(cx - 9, ey + 62); g.quadraticCurveTo(cx, ey + 52, cx + 9, ey + 62); g.stroke(); }
+  else if (mouth === 'flat') { g.beginPath(); g.moveTo(cx - 8, ey + 58); g.lineTo(cx + 8, ey + 58); g.stroke(); }
+  else { g.beginPath(); g.arc(cx, ey + 54, 9, Math.PI * 0.15, Math.PI * 0.85); g.stroke(); }
   // 흉터 (이마 왼쪽)
   if (ch.look && ch.look.scar) {
     g.fillStyle = 'rgba(170,60,50,0.85)';
@@ -2296,6 +2394,7 @@ function makeFaceTexture(ch, closed = false) {
 const SKIN = 0xf3d3b3;
 function buildModel(ch) {
   const C = ch.colors, L = ch.look || {};
+  const SKIN_C = ch.skin || SKIN;
   const g = new THREE.Group();
   const parts = {};
   const light = (hex, k = 0.25) => new THREE.Color(hex).lerp(new THREE.Color(0xffffff), k).getHex();
@@ -2322,8 +2421,14 @@ function buildModel(ch) {
     g.add(pleat);
   }
   // ---- 몸통·오비·깃 ----
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.55, 0.36), mat(C.kimono)); torso.position.y = 1.06;
-  const obi = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.15, 0.4), mat(C.obi)); obi.position.y = 0.82;
+  const bodyC = L.bareChest ? SKIN_C : C.kimono;
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.32, 0.36), mat(bodyC)); chest.position.y = 1.18;
+  const waist = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.3), mat(bodyC)); waist.position.y = 0.95;
+  if (L.bareChest) { for (const s of [-1, 1]) { const pec = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.06), mat(dark(SKIN_C, 0.12))); pec.position.set(s * 0.14, 1.2, 0.19); chest.add ? chest.parent : null; g.add(pec); } const abs = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.3, 0.02), mat(dark(SKIN_C, 0.25))); abs.position.set(0, 0.98, 0.17); g.add(abs); }
+  const torso = new THREE.Group(); torso.add(chest, waist); parts.torso = torso;
+  for (const s of [-1, 1]) { const sh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mat(bodyC)); sh.position.set(s * 0.32, 1.3, 0); torso.add(sh); }
+  for (const s of [-1, 1]) { const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.14, 6), mat(0xf0e8dc)); ankle.position.set(s * 0.15, 0.14, 0.03); g.add(ankle); }
+  const obi = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.15, 0.36), mat(C.obi)); obi.position.y = 0.82;
   const obiKnot = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.1), mat(light(C.obi, 0.2))); obiKnot.position.set(0, 0.82, -0.23);
   g.add(torso, obi, obiKnot);
   for (const s of [-1, 1]) {
@@ -2332,14 +2437,19 @@ function buildModel(ch) {
     g.add(collar);
   }
   // ---- 하오리: 등판 + 옆판 + 무늬 ----
-  const haoriBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.64, 0.12), mat(C.haori)); haoriBack.position.set(0, 1.0, -0.2);
-  g.add(haoriBack);
-  for (const s of [-1, 1]) {
-    const side = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.64, 0.38), mat(C.haori)); side.position.set(s * 0.37, 1.0, -0.02);
-    const front = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.05), mat(C.haori)); front.position.set(s * 0.22, 1.0, 0.2);
-    g.add(side, front);
+  if (!L.bareChest) {
+    const haoriBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.64, 0.12), mat(C.haori)); haoriBack.position.set(0, 1.0, -0.2);
+    g.add(haoriBack);
+    for (const s of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.64, 0.38), mat(C.haori)); side.position.set(s * 0.37, 1.0, -0.02);
+      const front = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.05), mat(C.haori)); front.position.set(s * 0.22, 1.0, 0.2);
+      g.add(side, front);
+    }
   }
-  const pat = L.pattern || 'plain';
+  if (L.furPelt) {
+    for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 4), mat(i % 2 ? 0x6a5a48 : 0x8a7a62)); tuft.position.set(Math.sin(a) * 0.36, 0.72, Math.cos(a) * 0.3); tuft.rotation.x = Math.PI + Math.cos(a) * 0.3; tuft.rotation.z = -Math.sin(a) * 0.3; g.add(tuft); }
+  }
+  const pat = L.bareChest ? 'plain' : (L.pattern || 'plain');
   const patColor = C.pattern !== undefined ? C.pattern : light(C.haori, 0.4);
   if (pat === 'stripes') {
     for (let i = 0; i < 4; i++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.13), mat(patColor)); st.position.set(0, 0.74 + i * 0.17, -0.2); g.add(st); }
@@ -2365,15 +2475,22 @@ function buildModel(ch) {
       const tri = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.13, 3), mat(patColor));
       tri.position.set(-0.24 + col * 0.16 + (r % 2) * 0.08, 0.78 + r * 0.17, -0.265); tri.rotation.y = Math.PI / 6; g.add(tri);
     }
+  } else if (pat === 'dots') {
+    for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), mat(patColor)); d.scale.z = 0.4; d.position.set(-0.22 + (i % 3) * 0.22, 0.8 + Math.floor(i / 3) * 0.3, -0.265); g.add(d); }
+  } else if (pat === 'flowers') {
+    for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.025, 4, 6), mat(patColor)); f.position.set(-0.2 + i * 0.2, 0.78 + (i % 2) * 0.28, -0.265); g.add(f); }
+  } else if (pat === 'lines') {
+    for (const s of [-1, 1]) { const ln = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.02), mat(patColor)); ln.position.set(s * 0.18, 1.0, -0.265); ln.rotation.z = s * 0.2; g.add(ln); }
   } else if (pat === 'leaves') {
     for (let i = 0; i < 4; i++) { const lf = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), mat(patColor)); lf.scale.set(1, 1.6, 0.4); lf.position.set(-0.2 + i * 0.13, 0.78 + (i % 2) * 0.22, -0.265); lf.rotation.z = 0.5; g.add(lf); }
   }
   // 하오리 옷깃 테두리
-  for (const s of [-1, 1]) { const trim = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 0.06), mat(patColor)); trim.position.set(s * 0.14, 1.0, 0.21); g.add(trim); }
+  if (!L.bareChest) for (const s of [-1, 1]) { const trim = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 0.06), mat(patColor)); trim.position.set(s * 0.14, 1.0, 0.21); g.add(trim); }
 
   // ---- 목·머리 ----
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 6), mat(SKIN)); neck.position.y = 1.36; g.add(neck);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 6), mat(SKIN_C)); neck.position.y = 1.36; g.add(neck);
   const headG = new THREE.Group(); headG.position.y = 1.7; g.add(headG); parts.head = headG;
+  for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), mat(SKIN_C)); ear.scale.set(0.6, 1, 0.8); ear.position.set(s * 0.33, -0.02, 0.02); headG.add(ear); }
   const faceOpen = makeFaceTexture(ch, false), faceClosed = makeFaceTexture(ch, true);
   const faceMat = new THREE.MeshToonMaterial({ map: faceOpen, gradientMap: gradientMap() });
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), faceMat); head.scale.set(1, 0.97, 0.94); headG.add(head);
@@ -2404,7 +2521,17 @@ function buildModel(ch) {
     b.position.set(x, 0.33 - len / 2, 0.27); b.rotation.x = 0.22; b.rotation.z = (x) * 0.5;
     headG.add(b);
   }
-  for (const s of [-1, 1]) { const lock = new THREE.Mesh(new THREE.BoxGeometry(0.09, L.longSide ? 0.5 : 0.3, 0.13), mat(C.hair)); lock.position.set(s * 0.33, L.longSide ? -0.05 : 0.05, -0.02); headG.add(lock); }
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const len = (L.longSide ? 0.5 : 0.3) * (1 - k * 0.18);
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.07, len, 0.09), mat(C.hair));
+      lock.position.set(s * (0.31 + k * 0.02), 0.2 - len / 2 + k * 0.03, -0.1 + k * 0.1); lock.rotation.z = s * 0.08 * k; headG.add(lock);
+      if (C.hairTip !== undefined) { const tip = new THREE.Mesh(new THREE.BoxGeometry(0.072, len * 0.3, 0.092), mat(C.hairTip)); tip.position.set(lock.position.x, lock.position.y - len * 0.35, lock.position.z); tip.rotation.z = lock.rotation.z; headG.add(tip); }
+    }
+  }
+  if (C.hairTip !== undefined) { for (let i = 0; i < bangLens.length; i++) { const x = -0.24 + i * (0.48 / (bangLens.length - 1)); const len = bangLens[i] * 0.75; const tip = new THREE.Mesh(new THREE.BoxGeometry(0.112, len * 0.3, 0.092), mat(C.hairTip)); tip.position.set(x, 0.33 - len + len * 0.15, 0.27); tip.rotation.x = 0.22; tip.rotation.z = x * 0.5; headG.add(tip); } }
+  if (L.longBack) { const back = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.6, 0.12), mat(C.hair)); back.position.set(0, -0.15, -0.3); headG.add(back); }
+  if (L.ahoge) { const ah = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.22, 4), mat(C.hair)); ah.position.set(0.05, 0.42, 0.05); ah.rotation.z = -0.5; ah.rotation.x = -0.3; headG.add(ah); }
   if (L.ponytail) { const pt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.55, 6), mat(C.hair)); pt.position.set(0, -0.05, -0.36); pt.rotation.x = 0.55; headG.add(pt); parts.ponytail = pt; }
   if (L.braid) { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.7, 6), mat(C.hair)); br.position.set(0.22, -0.2, -0.28); br.rotation.x = 0.35; headG.add(br); for (let i = 0; i < 3; i++) { const bead = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.02, 4, 8), mat(0xd9a640)); bead.position.set(0.22 + Math.sin(0.35) * 0, -0.05 - i * 0.2, -0.32 - i * 0.07); headG.add(bead); } }
   if (L.spikyHair) {
@@ -2426,7 +2553,8 @@ function buildModel(ch) {
   }
   if (L.kasa) { const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.3, 12), mat(0xd2b077)); kasa.position.y = 0.42; const rim = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.02, 4, 16), mat(0x8a6a3a)); rim.position.y = 0.28; rim.rotation.x = Math.PI / 2; headG.add(kasa, rim); }
   if (L.headband) { const band = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.08, 12), mat(0xf0e6d2)); band.position.y = 0.16; const tail1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.03), mat(0xf0e6d2)); tail1.position.set(0.08, -0.05, -0.36); tail1.rotation.x = 0.4; tail1.rotation.z = 0.2; const tail2 = tail1.clone(); tail2.position.x = -0.06; tail2.rotation.z = -0.2; headG.add(band, tail1, tail2); }
-  if (L.earring) { for (const s of [-1, 1]) { const er = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.02), mat(C.pattern || 0xd9a640)); er.position.set(s * 0.34, -0.1, 0.05); headG.add(er); } }
+  if (L.horns) { for (const s of [-1, 1]) { const horn = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 5), mat(0xe8e0d0)); horn.position.set(s * 0.2, 0.36, 0.05); horn.rotation.z = -s * 0.35; headG.add(horn); } }
+  if (L.earring) { for (const s of [-1, 1]) { const er = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.02), mat(0xf4ecd8)); er.position.set(s * 0.36, -0.14, 0.03); const sun = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.022, 8), mat(0xd03030)); sun.rotation.z = Math.PI / 2; sun.position.set(s * 0.375, -0.1, 0.03); headG.add(er, sun); } }
 
   // ---- 머플러 ----
   const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.085, 6, 12), mat(C.scarf)); scarf.position.y = 1.38; scarf.rotation.x = Math.PI / 2; g.add(scarf);
@@ -2434,23 +2562,48 @@ function buildModel(ch) {
   parts.scarfTail = scarfTail;
 
   // ---- 팔 + 넓은 소매 ----
-  const armGeo = new THREE.CylinderGeometry(0.075, 0.07, 0.42, 6); armGeo.translate(0, -0.21, 0);
+  const upperGeo = new THREE.CylinderGeometry(0.075, 0.07, 0.24, 6); upperGeo.translate(0, -0.12, 0);
+  const foreGeo = new THREE.CylinderGeometry(0.068, 0.062, 0.24, 6); foreGeo.translate(0, -0.12, 0);
   const makeArm = (s) => {
     const arm = new THREE.Group(); arm.position.set(s * 0.36, 1.27, 0);
-    arm.add(new THREE.Mesh(armGeo, mat(C.kimono)));
-    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.34, 0.24), mat(C.haori)); sleeve.position.set(s * 0.02, -0.14, 0);
-    const sleeveTrim = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.05, 0.25), mat(patColor)); sleeveTrim.position.set(s * 0.02, -0.3, 0);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.085, 7, 6), mat(SKIN)); hand.position.y = -0.46;
-    arm.add(sleeve, sleeveTrim, hand);
+    arm.add(new THREE.Mesh(upperGeo, mat(L.bareChest ? SKIN_C : C.kimono)));
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.24), mat(C.haori)); sleeve.position.set(s * 0.02, -0.12, 0); sleeve.visible = !L.bareChest;
+    const sleeveTrim = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.05, 0.25), mat(patColor)); sleeveTrim.position.set(s * 0.02, -0.26, 0); sleeveTrim.visible = !L.bareChest;
+    const elbow = new THREE.Group(); elbow.position.y = -0.24; elbow.rotation.x = -0.35;
+    const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), mat(C.kimono));
+    const fore = new THREE.Mesh(foreGeo, mat(SKIN_C));
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.085, 7, 6), mat(SKIN_C)); hand.position.y = -0.26;
+    elbow.add(elbowJoint, fore, hand);
+    if (L.claws) for (let i = 0; i < 3; i++) { const claw = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.14, 4), mat(0xe8e0d0)); claw.position.set(-0.04 + i * 0.04, -0.36, 0.05); claw.rotation.x = Math.PI; elbow.add(claw); }
+    arm.add(sleeve, sleeveTrim, elbow);
+    arm.elbow = elbow;
     arm.rotation.order = 'YXZ';
     return arm;
   };
   const leftArm = makeArm(-1); leftArm.rotation.z = 0.2; parts.leftArm = leftArm;
   const rightArm = makeArm(1); parts.rightArm = rightArm;
+  parts.extraArms = [];
+  if (L.extraArms) {
+    for (let i = 0; i < L.extraArms; i++) {
+      const s = i % 2 ? -1 : 1;
+      const a = makeArm(s); a.position.set(s * (0.3 + 0.08 * Math.floor(i / 2)), 1.0 - Math.floor(i / 2) * 0.22, -0.12);
+      a.rotation.z = s * (0.6 + Math.floor(i / 2) * 0.3); a.rotation.x = -0.4;
+      g.add(a); parts.extraArms.push(a);
+    }
+  }
+  if (L.scythes) {
+    for (const arm of [leftArm, rightArm]) {
+      const sc = new THREE.Group(); sc.position.set(0, -0.3, 0);
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 5), mat(0x2a2a2a)); handle.rotation.x = Math.PI / 2; handle.position.z = 0.3;
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.5), new THREE.MeshToonMaterial({ color: 0x9aa0a0, gradientMap: gradientMap() })); blade.position.set(0, 0.2, 0.7); blade.rotation.x = 0.5;
+      sc.add(handle, blade); sc.rotation.x = -1.0; arm.elbow.add(sc);
+    }
+  }
 
   // ---- 카타나 ----
   const bs = L.bladeScale || 1;
-  const katana = new THREE.Group(); katana.position.set(0, -0.46, 0);
+  const katana = new THREE.Group(); katana.position.set(0, -0.26, 0);
+  katana.visible = !L.noSword;
   const tsuka = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.3, 6), mat(0x2a1e1c)); tsuka.rotation.x = Math.PI / 2;
   const wrapC = C.obi === 0x1a1a1a || C.obi === 0x222222 ? 0x8a1f1f : C.obi;
   for (let i = 0; i < 3; i++) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.039, 0.039, 0.04, 6), mat(wrapC)); w.rotation.x = Math.PI / 2; w.position.z = -0.1 + i * 0.08; katana.add(w); }
@@ -2460,16 +2613,18 @@ function buildModel(ch) {
   const edge = new THREE.Mesh(new THREE.BoxGeometry(0.012 * bs, 0.03 * bs, 1.0 * bs), new THREE.MeshBasicMaterial({ color: C.glow })); edge.position.set(0, 0.045 * bs, 0.68 * bs);
   const tip = new THREE.Mesh(new THREE.ConeGeometry(0.037 * bs, 0.12, 4), bladeMat); tip.rotation.x = Math.PI / 2; tip.position.z = 1.24 * bs; tip.rotation.z = Math.PI / 4;
   const tassel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), mat(wrapC)); tassel.position.set(0, -0.08, -0.16);
+  if (L.serrated) for (let i = 0; i < 7; i++) { const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.035 * bs, 0.08 * bs, 3), bladeMat); tooth.position.set(0, 0.07 * bs, (0.3 + i * 0.13) * bs); katana.add(tooth); }
   katana.add(tsuka, tsuba, blade, edge, tip, tassel);
   katana.rotation.x = -1.05;
-  rightArm.add(katana);
+  rightArm.elbow.add(katana);
   parts.katana = katana; parts.bladeMat = bladeMat;
   if (L.twinBlades) {
-    const k2 = katana.clone(); k2.position.set(0, -0.46, 0); leftArm.add(k2);
+    const k2 = katana.clone(); k2.position.set(0, -0.26, 0); leftArm.elbow.add(k2);
   }
   const saya = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 1.05 * bs, 6), mat(0x11111a)); saya.position.set(-0.22, 0.8, -0.16); saya.rotation.set(1.35, 0, 0.25);
   const sayaRing = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 4, 8), mat(0xb09a4a)); sayaRing.position.set(-0.2, 0.9, -0.12); sayaRing.rotation.set(1.35, 0, 0.25);
 
+  saya.visible = sayaRing.visible = !L.noSword;
   g.add(leftArm, rightArm, saya, sayaRing);
   const outlines = [];
   g.traverse((o) => {
@@ -2543,6 +2698,7 @@ class Player {
     this.kills = 0;
     this.lookIdle = 10;     // 마지막 수동 시점 조작 후 경과 시간
     this.aim = null;        // 조준 중: { act, t, yaw }
+    this.vy = 0; this.airborne = false; this.dive = false;
     this.aimMesh = null;
     this.cds = { rush: 0, flurry: 0, sweep: 0, wavecast: 0 };
     this.camTarget = null;  // 소프트 록온 대상
@@ -2607,6 +2763,7 @@ class Player {
     if (ml > 1) { mx /= ml; mz /= ml; ml = 1; }
     this.moving = ml > 0.001;
 
+    const hold = input.hold || (input.hold = {}), release = input.release || (input.release = {});
     // 타이머
     this.invuln = Math.max(0, this.invuln - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
@@ -2619,6 +2776,19 @@ class Player {
     }
     if (this.skill.regen > 0 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.skill.regen * dt);
 
+    // 점프 / 공중 낙하 베기
+    if (input.jump && !this.airborne && !this.dashTime && !(this.attack && this.attack.def.special)) {
+      this.airborne = true; this.vy = 7.5; this.attack = null; this.queued = null; this.aim = null; this._hideAim();
+      ctx.effects.burst(this.pos.clone().setY(0.1), { count: 12, colors: [0xffffff, this.ch.colors.glow], speed: 2, life: 0.4, size: 0.4, gravity: 0, drag: 2 });
+      this.events.push({ type: 'dash' });
+    }
+    input.jump = false;
+    if (this.airborne && !this.dive && (hold.light || hold.heavy || hold.tech1)) {
+      this.dive = true; this.vy = -22; this.invuln = Math.max(this.invuln, 0.4);
+      for (const a of ['light', 'heavy', 'tech1']) { hold[a] = 0; release[a] = false; }
+      this.events.push({ type: 'move', name: (this.ch.moves && this.ch.moves.dive) || '낙하 베기', tier: 2 });
+      this.events.push({ type: 'swing', heavy: true });
+    }
     // 대시
     if (input.dash && this.dashCooldown <= 0 && this.dashTime <= 0 && !(this.attack && this.attack.def.special)) {
       this.dashTime = DASH_TIME;
@@ -2638,7 +2808,6 @@ class Player {
     const acts = ['light', 'heavy', 'tech1', 'tech2', 'tech4', 'tech5', 'tech6'];
     const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush', tech4: 'flurry', tech5: 'sweep', tech6: 'wavecast' };
     const onCd = (name) => this.cds[name] !== undefined && this.cds[name] > 0;
-    const hold = input.hold || {}, release = input.release || {};
     if (!this.aim) {
       for (const a of acts) if (hold[a] && (hold[a] += dt) >= HOLD && !(this.attack && this.attack.def.special)) {
         this.aim = { act: a, t: 0, yaw: this.camYaw + Math.PI };
@@ -2712,7 +2881,26 @@ class Player {
     this.knock.multiplyScalar(Math.max(0, 1 - 7 * dt));
     this.pos.add(move);
     ctx.stage.resolveCollisions(this.pos, this.radius);
-    this.pos.y = 0;
+    if (this.airborne) {
+      this.vy -= 20 * dt; this.pos.y = Math.max(0, this.pos.y + this.vy * dt);
+      if (this.pos.y <= 0 && this.vy < 0) {
+        this.airborne = false; this.pos.y = 0;
+        if (this.dive) {
+          // 낙하 베기: 착지 충격파
+          this.dive = false;
+          const sp = this.ch.special;
+          ctx.effects.shockwave(this.pos, { color: sp.c1, radius: 3.6, life: 0.5, y: 0.1 });
+          ctx.effects.burst(this.center, { count: 30, colors: [sp.c1, sp.c2, 0xffffff], speed: 5, life: 0.6, size: 0.45, gravity: -6, drag: 1.5, up: 2 });
+          ctx.effects.addShake(0.5); this.hitstop = 0.06;
+          const dmg = 30 * this.skill.dmgMul;
+          for (const e of ctx.enemies) {
+            if (!e.targetable) continue;
+            const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z; const d = Math.hypot(dx, dz);
+            if (d < 3.4 + e.radius) this._applyHit(e, { dmg, knock: 8, stagger: 0.7, gauge: 10, hitstop: 0.06, shake: 0.3, heavy: true }, new THREE.Vector3(dx, 0, dz).normalize(), ctx);
+          }
+        }
+      }
+    } else this.pos.y = 0;
 
     if (this.attack) this._updateAttack(dt, ctx);
     this._updateWaves(dt, ctx);
@@ -3096,8 +3284,23 @@ class Player {
       }
       ra.rotation.set(damp(ra.rotation.x, tx, 12, dt), damp(ra.rotation.y, ty, 12, dt), damp(ra.rotation.z, tz, 12, dt));
     }
+    if (this.airborne) { tx = this.dive ? -2.6 : -1.6; lx = -1.2; bodyTilt = this.dive ? 0.5 : -0.15; }
     la.rotation.x = damp(la.rotation.x, lx, 12, dt);
     la.rotation.z = damp(la.rotation.z, lz, 12, dt);
+    // 팔꿈치: 공격 중엔 펴고, 평소엔 굽힘
+    const elbowBend = this.attack ? -0.1 : this.moving ? -0.5 : -0.4;
+    ra.elbow.rotation.x = damp(ra.elbow.rotation.x, elbowBend, 14, dt);
+    la.elbow.rotation.x = damp(la.elbow.rotation.x, this.moving ? -0.6 : -0.45, 14, dt);
+    // 숨쉬기(가슴), 고개 기울임/끄덕임
+    const bt = performance.now() * 0.0016;
+    if (P.torso) { const br = 1 + Math.sin(bt * 1.4) * 0.025; P.torso.scale.set(1, br, br); }
+    if (P.head) {
+      const hy = this.moving ? -Math.sin(this.walkPhase) * 0.06 : Math.sin(bt * 0.7) * 0.05;
+      P.head.rotation.z = damp(P.head.rotation.z, this.attack ? 0.08 : Math.sin(bt * 0.5) * 0.06, 6, dt);
+      P.head.rotation.y = damp(P.head.rotation.y, hy, 6, dt);
+      P.head.rotation.x = damp(P.head.rotation.x, this.moving ? 0.08 : Math.sin(bt * 0.9) * 0.03, 6, dt);
+    }
+    if (P.torso) P.torso.rotation.y = damp(P.torso.rotation.y, this.moving ? Math.sin(this.walkPhase) * 0.12 : 0, 10, dt);
     body.rotation.x = damp(body.rotation.x, bodyTilt, 12, dt);
     body.rotation.y = this.attack && this.attack.def.special ? bodyYawOff : damp(body.rotation.y, bodyYawOff, 20, dt);
     body.position.y = bob;
@@ -3361,6 +3564,8 @@ return { Ally };
 // ===== enemy.js =====
 const { Projectile, Enemy, MeleeYokai, BruteYokai, RangedYokai, BossOni, EnemyManager } = (() => {
 // enemy.js — 요괴: 근접형(小鬼), 원거리형(鬼火), 보스(黒鬼), 투사체, 웨이브/새벽 소멸 관리
+
+
 
 
 
@@ -3955,6 +4160,26 @@ class BossOni extends MeleeYokai {
     const tier = this.muzan ? { hp: 1.6, dmg: 1.6, spd: 4.0 } : this.upper ? { hp: 1.45, dmg: 1.4, spd: 3.8 } : this.lower ? { hp: 1.15, dmg: 1.15, spd: 3.3 } : { hp: 1, dmg: 1, spd: 3.0 };
     this.hp = this.maxHp = Math.round(this.maxHp * tier.hp); this.dmg = Math.round(this.dmg * tier.dmg); this.speed = tier.spd;
     this.tierName = this.muzan ? '무잔' : this.upper ? '상현' : this.lower ? '하현' : '도깨비';
+    // 혈귀 외형: 사람형 도깨비 모델로 교체
+    const design = getDemonDesign(cfg.id);
+    if (design) {
+      while (this.group.children.length) this.group.remove(this.group.children[0]);
+      this.mats = [];
+      const parts = buildModel({ colors: design.colors, look: design.look, skin: design.skin, special: { c1: cfg.eye } });
+      this.group.add(parts.body);
+      this.humanParts = parts;
+      this.armR = parts.rightArm; this.armL = parts.leftArm;
+      this.legs = [new THREE.Object3D(), new THREE.Object3D()];
+      // 텔레그래프용 오라 (눈 대신 몸 전체가 붉게 빛남)
+      const auraMat = new THREE.MeshBasicMaterial({ color: cfg.eye, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
+      const aura = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), auraMat); aura.position.y = 1.1; aura.scale.set(1, 1.6, 1); parts.body.add(aura);
+      this.aura = auraMat;
+      this.eyeMat = new THREE.MeshLambertMaterial({ color: cfg.eye, emissive: cfg.eye }); // animate 호환용 더미
+      this._collectMats();
+      this.mats = this.mats.filter((v) => v.m !== auraMat && !(v.m.side === THREE.BackSide));
+      this.scaleBase = Math.max(1.2, cfg.scale * 0.62);
+      this.radius = 0.48 * this.scaleBase; this.height = 2.0 * this.scaleBase; this.attackRange = 1.6 * this.scaleBase;
+    }
     this.chain = 0;
     for (const e of this.mats) {
       if (e.m.color && e.m.color.getHex() === 0xb8322a) e.m.color.setHex(cfg.body);
@@ -4166,6 +4391,14 @@ class BossOni extends MeleeYokai {
     const telegraph = (this.state === 'slam' && t < 0.85) || (this.state === 'charge' && t < 0.7) || ((this.state === 'firering' || this.state === 'thread') && t < 0.9) || (this.state === 'beam' && t < 1.0) || (this.state === 'fan' && t < 0.6) || (this.state === 'blink' && t < 0.95);
     this.eyeMat.emissive.setHex(telegraph ? 0xffffff : this.eyeColor);
     this.eyeMat.emissiveIntensity = telegraph ? 2 : 0.9;
+    if (this.aura) { this.aura.opacity = telegraph ? 0.35 + 0.15 * Math.sin(performance.now() * 0.02) : (this.phase >= 2 ? 0.08 : 0); }
+    if (this.humanParts) {
+      animateFace(this.humanParts, dt);
+      const P = this.humanParts;
+      P.leftArm.rotation.x = damp(P.leftArm.rotation.x, this.state === 'chase' ? Math.sin(performance.now() * 0.007 + this.id) * 0.4 : -0.6, 12, dt);
+      for (let i = 0; i < P.extraArms.length; i++) P.extraArms[i].rotation.x = -0.4 + Math.sin(performance.now() * 0.004 + i) * 0.3;
+      P.body.position.y = this.state === 'chase' ? Math.abs(Math.sin(performance.now() * 0.008)) * 0.05 : 0;
+    }
   }
 }
 
@@ -4224,7 +4457,8 @@ class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
-      if (this._ctx) this._normalize(this.boss, this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12, this._ctx);
+      if (this._ctx) this._normalize(this.boss, (this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12) * 3, this._ctx);
+      this.boss.dmg = Math.round(this.boss.dmg * 3);
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
@@ -4458,7 +4692,7 @@ class UI {
         <div id="message"><div id="msg-title"></div><div id="msg-sub"></div></div>
         <div id="vignette"></div>
         <div id="dash-cd"></div>
-        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Tab 메뉴 · Q 회복약 · M 소리 · Esc 일시정지</div>
+        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Space 점프(공중 공격=낙하 베기) · Tab 메뉴 · Q 회복약 · M 소리</div>
       </div>
       <div id="screen" class="screen">
         <div class="panel">
@@ -4670,7 +4904,7 @@ class UI {
           <tr><td>베기 / 강공 / 대시 / 비검 / 약</td><td>우하단 버튼</td></tr>
         </table><p class="tip">가로 화면을 권장합니다</p>` : `<table class="controls compact">
           <tr><td>W A S D · 마우스</td><td>이동 · 시점</td></tr>
-          <tr><td>좌클릭 / 우클릭 / Shift</td><td>3연타 / 강공격 / 대시</td></tr>
+          <tr><td>좌클릭 / 우클릭 / Shift / Space</td><td>3연타 / 강공격 / 대시 / 점프</td></tr>
           <tr><td>1~6 · 7/F</td><td>호흡 제1형~제6형 · 제7형(오의)</td></tr>
           <tr><td>Q · Tab · M</td><td>회복약 · 장비/스킬/상점/지도 · 소리</td></tr>
         </table>`}`;
@@ -4883,6 +5117,7 @@ function setupTouch(input, { onPause, onMenu, onSound } = {}) {
     <div id="stick"><div id="stick-base"></div><div id="stick-knob"></div></div>
     <div id="btns">
       <button class="tb tb-dash" data-act="dash">대시</button>
+      <button class="tb tb-jump" data-act="jump">점프</button>
       <button class="tb tb-light" data-act="light">베기</button>
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>
@@ -5082,7 +5317,7 @@ let lastCharId = null;
 try { lastCharId = localStorage.getItem('taisho_last_char'); if (lastCharId) character = getCharacter(lastCharId); } catch (_) { /* ignore */ }
 
 // ---------- 입력 ----------
-const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, tech1: false, tech2: false, hold: {}, release: {} };
+const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, jump: false, tech1: false, tech2: false, hold: {}, release: {} };
 if (TOUCH) {
   touch = setupTouch(input, { onPause: () => pause(), onMenu: () => toggleMenu(), onSound: () => toggleSound() });
   touch.setSound(audio.muted);
@@ -5092,7 +5327,8 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   input.keys[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.dash = true;
-  if (e.code === 'KeyF' || e.code === 'Space') { input.special = true; if (state === 'playing') e.preventDefault(); }
+  if (e.code === 'KeyF') input.special = true;
+  if (e.code === 'Space') { input.jump = true; if (state === 'playing') e.preventDefault(); }
   if (e.code === 'KeyQ') input.potion = true;
   if (e.code === 'Digit1') input.hold.tech1 = 0.0001;
   if (e.code === 'Digit2') input.hold.tech2 = 0.0001;
@@ -5361,7 +5597,7 @@ function frame() {
     player.updateCamera(camera, dt, effects.shake);
   }
   input.mouseDX = 0; input.mouseDY = 0;
-  input.special = input.dash = input.potion = false;
+  input.special = input.dash = input.potion = input.jump = false;
 
   if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); touch.setCooldowns(player.cds); touch.showAimHint(!!player.aim); }
   ui.setHP(player.hp, player.maxHp);
@@ -5400,7 +5636,7 @@ frame();
 
 window.__game = {
   get state() { return state; }, get time() { return stage.time; }, get player() { return player; }, get enemies() { return enemies; }, get allies() { return allies; },
-  get stage() { return stage; }, get progress() { return progress; }, get chapter() { return chapter; }, get audio() { return audio; }, input, showSelect, openMenu, closeMenu, storyDone, finishChapter, showStory,
+  get stage() { return stage; }, get progress() { return progress; }, get chapter() { return chapter; }, get audio() { return audio; }, get renderer() { return renderer; }, input, showSelect, openMenu, closeMenu, storyDone, finishChapter, showStory,
 };
 
 })();

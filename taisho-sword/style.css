@@ -276,7 +276,8 @@ body.touch #move { right: 26%; top: 30%; }
 #story-lines { margin: 22px 0 8px; text-align: left; }
 #story-lines p { font-size: 16px; line-height: 1.9; color: var(--ink); margin: 0 0 10px; opacity: 0; animation: storyIn 0.9s ease forwards; letter-spacing: 0.04em; }
 @keyframes storyIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-#story-cta { cursor: pointer; opacity: 0; animation: storyIn 0.6s ease forwards, blink 1.2s ease-in-out infinite alternate; pointer-events: auto; padding: 10px; }
+#story-cta { cursor: pointer; opacity: 0; animation: storyIn 0.6s ease forwards, blink 1.2s ease-in-out infinite alternate; pointer-events: none; padding: 10px; }
+#story.show #story-cta { pointer-events: auto; }
 .card .head .eye { position: absolute; top: 11px; width: 5px; height: 7px; border-radius: 50%; background: var(--c2); box-shadow: 0 0 3px var(--c2); }
 .card .head .eye.l { left: 7px; } .card .head .eye.r { right: 7px; }
 .card .hat.hair { background: var(--c4); }
@@ -339,3 +340,5 @@ body.touch #minimap-wrap { left: 14px; top: 10px; width: 140px; } body.touch #mi
 .diff.on { border-color: var(--crimson); background: rgba(184,50,42,0.35); }
 
 #lives-hud { color: #ff6a80; letter-spacing: 0.1em; font-size: 14px; }
+
+.tb-jump { right: 108px; bottom: 112px; width: 64px; height: 64px; font-size: 18px; border-color: rgba(200, 255, 200, 0.6); }

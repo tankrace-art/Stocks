@@ -41,7 +41,7 @@ export class UI {
         <div id="message"><div id="msg-title"></div><div id="msg-sub"></div></div>
         <div id="vignette"></div>
         <div id="dash-cd"></div>
-        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Tab 메뉴 · Q 회복약 · M 소리 · Esc 일시정지</div>
+        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Space 점프(공중 공격=낙하 베기) · Tab 메뉴 · Q 회복약 · M 소리</div>
       </div>
       <div id="screen" class="screen">
         <div class="panel">
@@ -253,7 +253,7 @@ export class UI {
           <tr><td>베기 / 강공 / 대시 / 비검 / 약</td><td>우하단 버튼</td></tr>
         </table><p class="tip">가로 화면을 권장합니다</p>` : `<table class="controls compact">
           <tr><td>W A S D · 마우스</td><td>이동 · 시점</td></tr>
-          <tr><td>좌클릭 / 우클릭 / Shift</td><td>3연타 / 강공격 / 대시</td></tr>
+          <tr><td>좌클릭 / 우클릭 / Shift / Space</td><td>3연타 / 강공격 / 대시 / 점프</td></tr>
           <tr><td>1~6 · 7/F</td><td>호흡 제1형~제6형 · 제7형(오의)</td></tr>
           <tr><td>Q · Tab · M</td><td>회복약 · 장비/스킬/상점/지도 · 소리</td></tr>
         </table>`}`;

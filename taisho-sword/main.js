@@ -52,7 +52,7 @@ let lastCharId = null;
 try { lastCharId = localStorage.getItem('taisho_last_char'); if (lastCharId) character = getCharacter(lastCharId); } catch (_) { /* ignore */ }
 
 // ---------- 입력 ----------
-const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, tech1: false, tech2: false, hold: {}, release: {} };
+const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, jump: false, tech1: false, tech2: false, hold: {}, release: {} };
 if (TOUCH) {
   touch = setupTouch(input, { onPause: () => pause(), onMenu: () => toggleMenu(), onSound: () => toggleSound() });
   touch.setSound(audio.muted);
@@ -62,7 +62,8 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   input.keys[e.code] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.dash = true;
-  if (e.code === 'KeyF' || e.code === 'Space') { input.special = true; if (state === 'playing') e.preventDefault(); }
+  if (e.code === 'KeyF') input.special = true;
+  if (e.code === 'Space') { input.jump = true; if (state === 'playing') e.preventDefault(); }
   if (e.code === 'KeyQ') input.potion = true;
   if (e.code === 'Digit1') input.hold.tech1 = 0.0001;
   if (e.code === 'Digit2') input.hold.tech2 = 0.0001;
@@ -331,7 +332,7 @@ function frame() {
     player.updateCamera(camera, dt, effects.shake);
   }
   input.mouseDX = 0; input.mouseDY = 0;
-  input.special = input.dash = input.potion = false;
+  input.special = input.dash = input.potion = input.jump = false;
 
   if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); touch.setCooldowns(player.cds); touch.showAimHint(!!player.aim); }
   ui.setHP(player.hp, player.maxHp);
@@ -370,5 +371,5 @@ frame();
 
 window.__game = {
   get state() { return state; }, get time() { return stage.time; }, get player() { return player; }, get enemies() { return enemies; }, get allies() { return allies; },
-  get stage() { return stage; }, get progress() { return progress; }, get chapter() { return chapter; }, get audio() { return audio; }, input, showSelect, openMenu, closeMenu, storyDone, finishChapter, showStory,
+  get stage() { return stage; }, get progress() { return progress; }, get chapter() { return chapter; }, get audio() { return audio; }, get renderer() { return renderer; }, input, showSelect, openMenu, closeMenu, storyDone, finishChapter, showStory,
 };

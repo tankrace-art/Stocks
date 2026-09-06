@@ -14,6 +14,7 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
     <div id="stick"><div id="stick-base"></div><div id="stick-knob"></div></div>
     <div id="btns">
       <button class="tb tb-dash" data-act="dash">대시</button>
+      <button class="tb tb-jump" data-act="jump">점프</button>
       <button class="tb tb-light" data-act="light">베기</button>
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>

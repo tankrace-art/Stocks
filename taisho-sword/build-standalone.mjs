@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const dir = path.dirname(new URL(import.meta.url).pathname);
 const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
-const order = ['util.js', 'items.js', 'characters.js', 'scenario.js', 'maps.js', 'audio.js', 'effects.js', 'stage.js', 'player.js', 'ally.js', 'enemy.js', 'ui.js', 'touch.js', 'main.js'];
+const order = ['util.js', 'items.js', 'characters.js', 'scenario.js', 'maps.js', 'demons.js', 'audio.js', 'effects.js', 'stage.js', 'player.js', 'ally.js', 'enemy.js', 'ui.js', 'touch.js', 'main.js'];
 
 let js = `import * as THREE from '${THREE_URL}';\n`;
 for (const f of order) {

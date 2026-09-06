@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { clamp, lerp, damp, rand, pick, angleLerp, easeOutCubic } from './util.js';
 import { ARENA_RADIUS } from './stage.js';
 import { generateItem, rollRarity, RARITIES } from './items.js';
+import { buildModel, animateFace } from './player.js';
+import { getDemonDesign } from './demons.js';
 
 function mat(color, extra = {}) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true, transparent: true, ...extra });
@@ -594,6 +596,26 @@ export class BossOni extends MeleeYokai {
     const tier = this.muzan ? { hp: 1.6, dmg: 1.6, spd: 4.0 } : this.upper ? { hp: 1.45, dmg: 1.4, spd: 3.8 } : this.lower ? { hp: 1.15, dmg: 1.15, spd: 3.3 } : { hp: 1, dmg: 1, spd: 3.0 };
     this.hp = this.maxHp = Math.round(this.maxHp * tier.hp); this.dmg = Math.round(this.dmg * tier.dmg); this.speed = tier.spd;
     this.tierName = this.muzan ? '무잔' : this.upper ? '상현' : this.lower ? '하현' : '도깨비';
+    // 혈귀 외형: 사람형 도깨비 모델로 교체
+    const design = getDemonDesign(cfg.id);
+    if (design) {
+      while (this.group.children.length) this.group.remove(this.group.children[0]);
+      this.mats = [];
+      const parts = buildModel({ colors: design.colors, look: design.look, skin: design.skin, special: { c1: cfg.eye } });
+      this.group.add(parts.body);
+      this.humanParts = parts;
+      this.armR = parts.rightArm; this.armL = parts.leftArm;
+      this.legs = [new THREE.Object3D(), new THREE.Object3D()];
+      // 텔레그래프용 오라 (눈 대신 몸 전체가 붉게 빛남)
+      const auraMat = new THREE.MeshBasicMaterial({ color: cfg.eye, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
+      const aura = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), auraMat); aura.position.y = 1.1; aura.scale.set(1, 1.6, 1); parts.body.add(aura);
+      this.aura = auraMat;
+      this.eyeMat = new THREE.MeshLambertMaterial({ color: cfg.eye, emissive: cfg.eye }); // animate 호환용 더미
+      this._collectMats();
+      this.mats = this.mats.filter((v) => v.m !== auraMat && !(v.m.side === THREE.BackSide));
+      this.scaleBase = Math.max(1.2, cfg.scale * 0.62);
+      this.radius = 0.48 * this.scaleBase; this.height = 2.0 * this.scaleBase; this.attackRange = 1.6 * this.scaleBase;
+    }
     this.chain = 0;
     for (const e of this.mats) {
       if (e.m.color && e.m.color.getHex() === 0xb8322a) e.m.color.setHex(cfg.body);
@@ -805,6 +827,14 @@ export class BossOni extends MeleeYokai {
     const telegraph = (this.state === 'slam' && t < 0.85) || (this.state === 'charge' && t < 0.7) || ((this.state === 'firering' || this.state === 'thread') && t < 0.9) || (this.state === 'beam' && t < 1.0) || (this.state === 'fan' && t < 0.6) || (this.state === 'blink' && t < 0.95);
     this.eyeMat.emissive.setHex(telegraph ? 0xffffff : this.eyeColor);
     this.eyeMat.emissiveIntensity = telegraph ? 2 : 0.9;
+    if (this.aura) { this.aura.opacity = telegraph ? 0.35 + 0.15 * Math.sin(performance.now() * 0.02) : (this.phase >= 2 ? 0.08 : 0); }
+    if (this.humanParts) {
+      animateFace(this.humanParts, dt);
+      const P = this.humanParts;
+      P.leftArm.rotation.x = damp(P.leftArm.rotation.x, this.state === 'chase' ? Math.sin(performance.now() * 0.007 + this.id) * 0.4 : -0.6, 12, dt);
+      for (let i = 0; i < P.extraArms.length; i++) P.extraArms[i].rotation.x = -0.4 + Math.sin(performance.now() * 0.004 + i) * 0.3;
+      P.body.position.y = this.state === 'chase' ? Math.abs(Math.sin(performance.now() * 0.008)) * 0.05 : 0;
+    }
   }
 }
 
@@ -863,7 +893,8 @@ export class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
-      if (this._ctx) this._normalize(this.boss, this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12, this._ctx);
+      if (this._ctx) this._normalize(this.boss, (this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12) * 3, this._ctx);
+      this.boss.dmg = Math.round(this.boss.dmg * 3);
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
