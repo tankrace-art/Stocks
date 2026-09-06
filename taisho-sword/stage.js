@@ -7,14 +7,14 @@ export const NIGHT_LENGTH = 300;     // 밤의 길이(초). 이 시간이 지나
 const DAWN_DURATION = 9;             // 새벽 전환 시간(초)
 
 const NIGHT = {
-  sky: new THREE.Color(0x070a18),
-  fog: new THREE.Color(0x0c1226),
-  moon: new THREE.Color(0x9fb4ff),
-  moonIntensity: 1.6,
-  hemiSky: new THREE.Color(0x24305a),
-  hemiGround: new THREE.Color(0x0a1208),
-  hemiIntensity: 0.55,
-  fogDensity: 0.042,
+  sky: new THREE.Color(0x141c38),
+  fog: new THREE.Color(0x1e2a4a),
+  moon: new THREE.Color(0xb8c8ff),
+  moonIntensity: 2.6,
+  hemiSky: new THREE.Color(0x4a5a90),
+  hemiGround: new THREE.Color(0x1e2a1a),
+  hemiIntensity: 1.25,
+  fogDensity: 0.03,
 };
 const DAWN = {
   sky: new THREE.Color(0xf1b48c),
@@ -116,19 +116,19 @@ export class Stage {
       pos.setZ(i, h);
     }
     geo.computeVertexNormals();
-    const ground = new THREE.Mesh(geo, flatMat(0x1d2a1b));
+    const ground = new THREE.Mesh(geo, flatMat(0x2a3a28));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
     this.groundMat = ground.material;
 
     // 아레나 중앙: 오래된 석판 광장
-    const plaza = new THREE.Mesh(new THREE.CircleGeometry(7.5, 10), flatMat(0x3a3f46));
+    const plaza = new THREE.Mesh(new THREE.CircleGeometry(7.5, 10), flatMat(0x40464e));
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.y = 0.02;
     plaza.receiveShadow = true;
     this.scene.add(plaza);
-    const plaza2 = new THREE.Mesh(new THREE.RingGeometry(7.5, 9, 10), flatMat(0x2e3238));
+    const plaza2 = new THREE.Mesh(new THREE.RingGeometry(7.5, 9, 10), flatMat(0x353a41));
     plaza2.rotation.x = -Math.PI / 2;
     plaza2.position.y = 0.015;
     plaza2.receiveShadow = true;
@@ -373,7 +373,7 @@ export class Stage {
   _buildMist() {
     const tex = makeRadialTexture();
     this.mistMat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, opacity: 0.32, depthWrite: false, color: 0xaebbd8, blending: THREE.NormalBlending,
+      map: tex, transparent: true, opacity: 0.28, depthWrite: false, color: 0xc0cce8, blending: THREE.NormalBlending,
     });
     this.mistPlanes = [];
     const geo = new THREE.PlaneGeometry(1, 1);
@@ -463,8 +463,8 @@ export class Stage {
     this.haloMat.opacity = 0.18 * (1 - t);
     this.moonMat.color.setRGB(1, lerp(0.95, 0.85, t), lerp(0.82, 0.6, t));
     this.moon.position.y = lerp(55, 20, t);
-    this.mistMat.opacity = lerp(0.32, 0.22, t);
-    this.mistMat.color.setHex(0xaebbd8).lerp(new THREE.Color(0xffd6bd), t);
+    this.mistMat.opacity = lerp(0.28, 0.22, t);
+    this.mistMat.color.setHex(0xc0cce8).lerp(new THREE.Color(0xffd6bd), t);
     this.fireflyMat.opacity = 0.9 * (1 - t);
 
     // 석등 흔들림

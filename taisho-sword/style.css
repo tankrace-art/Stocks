@@ -115,6 +115,11 @@ body.touch #night { bottom: calc(14px + env(safe-area-inset-bottom)); width: min
 .screen .tip { margin-top: 10px; font-size: 12px; color: var(--gold); letter-spacing: 0.2em; }
 
 /* 작은 화면(휴대폰 가로) */
+@media (max-height: 700px) {
+  .card .figure { height: 70px; transform: scale(0.75); transform-origin: top center; margin-bottom: 0; }
+  .card .desc { display: none; }
+  .card .name { font-size: 22px; }
+}
 @media (max-height: 460px) {
   #status { width: 220px; left: 16px; top: 12px; }
   #combo-num { font-size: 56px; }
@@ -129,4 +134,115 @@ body.touch #night { bottom: calc(14px + env(safe-area-inset-bottom)); width: min
   .tb-heavy { right: 88px; bottom: 20px; width: 60px; height: 60px; }
   .tb-dash { right: 16px; bottom: 92px; width: 60px; height: 60px; }
   .tb-special { right: 96px; bottom: 100px; width: 58px; height: 58px; font-size: 15px; }
+}
+
+/* ---------- 상태창 추가 (레벨/경험치/회복약/로그) ---------- */
+#status .label.small { font-size: 11px; margin-top: 8px; }
+#level-text.has-points { color: #ffd9a0; text-shadow: 0 0 8px rgba(255,170,90,0.8); animation: blink 1s ease-in-out infinite alternate; }
+.bar.xp { height: 5px; border-color: rgba(243,233,216,0.2); }
+.bar.xp .fill { background: linear-gradient(90deg, #7a6a30, #d9a640); transition: width 0.3s; }
+#potion-hud { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; letter-spacing: 0.08em; color: var(--ink); }
+#potion-hud .pot { width: 12px; height: 16px; border-radius: 3px 3px 5px 5px; background: linear-gradient(#ff6a80, #b8322a); box-shadow: 0 0 8px rgba(255,80,110,0.7); }
+#potion-hud .key { font-size: 11px; padding: 1px 6px; border: 1px solid rgba(243,233,216,0.4); color: var(--ink-dim); }
+#potion-hud.empty { opacity: 0.45; }
+#log { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.log-line { font-size: 13px; letter-spacing: 0.04em; color: var(--ink); text-shadow: 0 0 8px rgba(0,0,0,0.9); transition: opacity 0.6s; animation: logIn 0.3s ease; }
+.log-line.fade { opacity: 0; }
+.log-line.warn { color: #ff9a80; }
+.log-line.potion { color: #ffb0c0; }
+@keyframes logIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+#key-hints { position: absolute; right: 28px; bottom: 22px; font-size: 12px; letter-spacing: 0.1em; color: var(--ink-dim); }
+
+/* ---------- 캐릭터 선택 ---------- */
+#select { align-items: flex-start; overflow: auto; padding: 18px 0; }
+.select-wrap { text-align: center; max-width: 1180px; width: 96vw; margin: auto; }
+.select-wrap .tip { margin-top: 14px; font-size: 13px; color: var(--ink-dim); letter-spacing: 0.1em; }
+#select-cards { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.card { width: 196px; padding: 12px 12px 12px; border: 1px solid rgba(243,233,216,0.28); background: rgba(10, 8, 14, 0.72); cursor: pointer; transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; text-align: center; }
+.card:hover, .card:focus { transform: translateY(-6px); border-color: var(--c2); box-shadow: 0 0 24px color-mix(in srgb, var(--c2) 45%, transparent); }
+.card .figure { position: relative; width: 70px; height: 96px; margin: 0 auto 8px; }
+.card .head { position: absolute; left: 22px; top: 12px; width: 26px; height: 26px; border-radius: 50%; background: #e9c7a4; }
+.card .hat { position: absolute; left: 20px; top: 6px; width: 30px; height: 12px; background: #111; border-radius: 6px 6px 2px 2px; }
+.card .hat.kasa { left: 8px; top: 2px; width: 54px; height: 14px; background: #c9a86a; border-radius: 50% 50% 4px 4px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.card .hat.hair { background: var(--c3); height: 14px; clip-path: polygon(0 100%, 15% 0, 35% 60%, 50% 0, 65% 60%, 85% 0, 100% 100%); }
+.card .hat.band { background: #f0e6d2; height: 6px; top: 16px; }
+.card .scarf { position: absolute; left: 20px; top: 36px; width: 30px; height: 8px; border-radius: 4px; background: var(--c3); }
+.card .body { position: absolute; left: 14px; top: 42px; width: 42px; height: 52px; background: linear-gradient(var(--c1) 55%, #1b1f33 55%); border-radius: 6px 6px 3px 3px; }
+.card .blade { position: absolute; left: 56px; top: 30px; width: 3px; height: 58px; background: linear-gradient(#fff, var(--c2)); box-shadow: 0 0 8px var(--c2); transform: rotate(18deg); }
+.card .name { font-size: 26px; font-weight: 800; letter-spacing: 0.15em; }
+.card .style { font-size: 12px; color: var(--gold); letter-spacing: 0.08em; margin-top: 2px; }
+.card .desc { font-size: 12px; line-height: 1.5; color: var(--ink-dim); margin: 6px 0; min-height: 54px; }
+.card .statbars { margin: 0 auto; font-size: 12px; border-collapse: collapse; }
+.card .statbars td { padding: 1px 6px; }
+.card .statbars td:first-child { color: var(--ink-dim); }
+.card .statbars td:last-child { color: var(--c2); letter-spacing: 0.1em; }
+.card .special { margin-top: 8px; font-size: 13px; color: var(--c2); letter-spacing: 0.1em; }
+.card .lv { margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
+
+/* ---------- 장비·스킬 메뉴 ---------- */
+.menu-panel { width: min(1100px, 96vw); max-height: 92vh; overflow: auto; border: 1px solid rgba(243,233,216,0.3); background: rgba(10, 8, 14, 0.9); box-shadow: 0 0 60px rgba(0,0,0,0.8); padding: 18px 22px; cursor: default; }
+.menu-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid rgba(243,233,216,0.2); padding-bottom: 12px; margin-bottom: 14px; }
+.menu-tabs { display: flex; gap: 6px; }
+.menu-tabs .tab, #menu-close, #skill-reset { font-family: var(--serif); font-size: 15px; letter-spacing: 0.15em; padding: 8px 16px; border: 1px solid rgba(243,233,216,0.35); background: transparent; color: var(--ink); cursor: pointer; }
+.menu-tabs .tab.on { background: var(--crimson); border-color: var(--crimson); }
+#menu-info { flex: 1; font-size: 14px; color: var(--ink-dim); letter-spacing: 0.05em; }
+#menu-info .pts.on { color: #ffd9a0; }
+#menu-close { margin-left: auto; }
+.skill-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.skill-col { display: flex; flex-direction: column; align-items: stretch; }
+.branch { text-align: center; margin-bottom: 8px; }
+.branch b { display: block; font-size: 20px; letter-spacing: 0.3em; }
+.branch span { font-size: 12px; color: var(--ink-dim); }
+.node-link { width: 2px; height: 16px; margin: 0 auto; background: rgba(243,233,216,0.2); }
+.node-link.lit { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+.skill-col .node-link:first-of-type { display: none; }
+.node { font-family: var(--serif); text-align: left; padding: 10px 12px; border: 1px solid rgba(243,233,216,0.25); background: rgba(20, 16, 24, 0.7); color: var(--ink); cursor: default; position: relative; }
+.node .tier { position: absolute; right: 10px; top: 8px; font-size: 11px; color: var(--ink-dim); letter-spacing: 0.1em; }
+.node .nname { font-size: 16px; font-weight: 700; letter-spacing: 0.1em; }
+.node .ndesc { font-size: 12px; color: var(--ink-dim); margin-top: 3px; line-height: 1.5; }
+.node .nstate { font-size: 11px; margin-top: 6px; letter-spacing: 0.1em; color: var(--ink-dim); }
+.node.learned { border-color: var(--gold); background: rgba(217, 166, 64, 0.16); }
+.node.learned .nstate { color: var(--gold); }
+.node.can { border-color: #ffd9a0; cursor: pointer; box-shadow: 0 0 14px rgba(255, 190, 100, 0.35); animation: blink 1.2s ease-in-out infinite alternate; }
+.node.can .nstate { color: #ffd9a0; }
+.node.locked { opacity: 0.4; }
+.menu-foot { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 12px; color: var(--ink-dim); }
+.menu-foot button { margin-left: auto; font-size: 12px; padding: 6px 12px; }
+.gear-wrap { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+.gear-title { font-size: 14px; letter-spacing: 0.25em; color: var(--gold); margin: 6px 0 8px; }
+.gear-title span { color: var(--ink-dim); letter-spacing: 0.05em; margin-left: 8px; }
+.bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; max-height: 60vh; overflow: auto; }
+.item { position: relative; padding: 8px 10px; border: 1px solid rgba(243,233,216,0.25); background: rgba(20, 16, 24, 0.7); margin-bottom: 8px; cursor: pointer; transition: border-color 0.12s, transform 0.12s; }
+.bag .item { margin-bottom: 0; }
+.item:hover { transform: translateY(-2px); border-color: rgba(243,233,216,0.6); }
+.item.empty { cursor: default; opacity: 0.55; }
+.item.rare { border-color: rgba(106,176,255,0.55); }
+.item.hidden { border-color: rgba(200,140,255,0.6); box-shadow: 0 0 10px rgba(200,140,255,0.2); }
+.item.unique { border-color: rgba(255,181,71,0.75); box-shadow: 0 0 14px rgba(255,181,71,0.3); }
+.item .irow { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.1em; }
+.item .islot { color: var(--ink-dim); }
+.item .iname { font-size: 15px; font-weight: 700; margin: 2px 0 4px; }
+.item .istats { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink); }
+.item .iact { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: var(--ink-dim); letter-spacing: 0.1em; }
+.totals { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.legend { margin-top: 12px; font-size: 11px; display: flex; gap: 10px; flex-wrap: wrap; }
+.menu-body .tip { font-size: 13px; color: var(--ink-dim); line-height: 1.6; padding: 12px; }
+
+/* 터치 상단 버튼 */
+#top-btns { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); display: flex; gap: 8px; }
+#top-btns button { height: 42px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(243, 233, 216, 0.4); background: rgba(8, 10, 20, 0.55); color: var(--ink); font-family: var(--serif); font-size: 13px; letter-spacing: 0.05em; touch-action: none; -webkit-tap-highlight-color: transparent; }
+#tb-pause { position: static; width: 42px; }
+.tb-potion { right: 200px; bottom: 6px; width: 60px; height: 60px; font-size: 16px; border-color: rgba(255, 120, 150, 0.7); }
+.tb-potion span { display: block; font-size: 11px; color: var(--ink-dim); }
+.tb-potion.empty { opacity: 0.4; }
+body.touch #combo { top: 70px; right: 24px; }
+body.touch #btns { width: 270px; }
+body.touch .menu-panel { max-height: 88vh; }
+body.touch .gear-wrap { grid-template-columns: 1fr; }
+
+@media (max-width: 900px) {
+  .skill-cols { grid-template-columns: 1fr; }
+  .gear-wrap { grid-template-columns: 1fr; }
+  .card { width: 160px; padding: 10px; }
+  .card .desc { display: none; }
 }

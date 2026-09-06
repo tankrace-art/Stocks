@@ -7,18 +7,23 @@ const LOOK_SENS = 2.4;     // 드래그 → 시점 회전 배율
 const TAP_TIME = 220;      // 탭 판정 시간(ms)
 const TAP_MOVE = 12;       // 탭 판정 이동 허용(px)
 
-export function setupTouch(input, { onPause } = {}) {
+export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   const layer = document.createElement('div');
   layer.id = 'touch';
   layer.innerHTML = `
     <div id="stick"><div id="stick-base"></div><div id="stick-knob"></div></div>
     <div id="btns">
-      <button class="tb tb-special" data-act="special">秘剣</button>
-      <button class="tb tb-heavy" data-act="heavy">強</button>
-      <button class="tb tb-dash" data-act="dash">閃</button>
-      <button class="tb tb-light" data-act="light">斬</button>
+      <button class="tb tb-special" data-act="special">비검</button>
+      <button class="tb tb-heavy" data-act="heavy">강공</button>
+      <button class="tb tb-dash" data-act="dash">대시</button>
+      <button class="tb tb-light" data-act="light">베기</button>
+      <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>
-    <button id="tb-pause" aria-label="일시정지">❚❚</button>
+    <div id="top-btns">
+      <button id="tb-menu" aria-label="장비/스킬">장비·스킬</button>
+      <button id="tb-sound" aria-label="소리">소리</button>
+      <button id="tb-pause" aria-label="일시정지">❚❚</button>
+    </div>
     <div id="touch-hint">왼쪽: 이동 · 오른쪽: 드래그 시점 / 탭 공격</div>
   `;
   document.body.appendChild(layer);
@@ -46,7 +51,7 @@ export function setupTouch(input, { onPause } = {}) {
   const onStart = (e) => {
     for (const t of e.changedTouches) {
       const target = t.target;
-      if (target.closest && target.closest('.tb, #tb-pause')) continue;
+      if (target.closest && target.closest('.tb, #top-btns')) continue;
       const leftHalf = t.clientX < window.innerWidth * 0.5;
       if (leftHalf && stickId === null) {
         stickId = t.identifier; stickX = t.clientX; stickY = t.clientY;
@@ -101,9 +106,14 @@ export function setupTouch(input, { onPause } = {}) {
     b.addEventListener('touchcancel', off, opts);
     b.addEventListener('contextmenu', (e) => e.preventDefault());
   }
-  const pauseBtn = layer.querySelector('#tb-pause');
-  pauseBtn.addEventListener('touchstart', (e) => { if (e.cancelable) e.preventDefault(); e.stopPropagation(); onPause && onPause(); }, opts);
-  pauseBtn.addEventListener('click', (e) => { e.preventDefault(); onPause && onPause(); });
+  const bindTop = (id, fn) => {
+    const b = layer.querySelector(id);
+    b.addEventListener('touchstart', (e) => { if (e.cancelable) e.preventDefault(); e.stopPropagation(); fn && fn(); }, opts);
+    b.addEventListener('click', (e) => { e.preventDefault(); fn && fn(); });
+  };
+  bindTop('#tb-pause', onPause);
+  bindTop('#tb-menu', onMenu);
+  bindTop('#tb-sound', onSound);
 
   const api = {
     layer,
@@ -113,6 +123,8 @@ export function setupTouch(input, { onPause } = {}) {
       else if (!hintTimer) { hint.classList.add('show'); hintTimer = setTimeout(() => hint.classList.remove('show'), 5000); }
     },
     setSpecialReady(ready) { layer.querySelector('.tb-special').classList.toggle('ready', !!ready); },
+    setPotions(n) { layer.querySelector('#tb-potion-n').textContent = n; layer.querySelector('.tb-potion').classList.toggle('empty', n <= 0); },
+    setSound(muted) { layer.querySelector('#tb-sound').textContent = muted ? '소리 꺼짐' : '소리 켜짐'; },
   };
   return api;
 }
