@@ -18,10 +18,17 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>
     <div id="tech-row">
-      <button class="tb tech" data-act="tech1"><small>제1형</small><span id="tech1-label">마무리</span></button>
-      <button class="tb tech" data-act="tech2"><small>제2형</small><span id="tech2-label">돌진</span><i id="tech2-cd"></i></button>
-      <button class="tb tech" data-act="heavy"><small>제3형</small><span id="tech3-label">강공</span></button>
-      <button class="tb tech tb-special" data-act="special"><small>오의</small><span id="tech4-label">비검</span></button>
+      <div class="tech-line">
+        <button class="tb tech" data-act="tech1"><small>제1형</small><span data-l="l3">마무리</span></button>
+        <button class="tb tech" data-act="tech2"><small>제2형</small><span data-l="rush">돌진</span><i data-cd="rush"></i></button>
+        <button class="tb tech" data-act="heavy"><small>제3형</small><span data-l="heavy">강공</span></button>
+        <button class="tb tech" data-act="tech4"><small>제4형</small><span data-l="flurry">연참</span><i data-cd="flurry"></i></button>
+      </div>
+      <div class="tech-line">
+        <button class="tb tech" data-act="tech5"><small>제5형</small><span data-l="sweep">회전</span><i data-cd="sweep"></i></button>
+        <button class="tb tech" data-act="tech6"><small>제6형</small><span data-l="wave">검기</span><i data-cd="wavecast"></i></button>
+        <button class="tb tech tb-special" data-act="special"><small>제7형 · 오의</small><span data-l="special">오의</span></button>
+      </div>
     </div>
     <div id="aim-hint">길게 누르면 조준 · 조이스틱으로 방향</div>
     <div id="top-btns">
@@ -103,7 +110,7 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   layer.addEventListener('touchcancel', onEnd, opts);
 
   // 액션 버튼
-  const AIMABLE = new Set(['light', 'heavy', 'tech1', 'tech2']);
+  const AIMABLE = new Set(['light', 'heavy', 'tech1', 'tech2', 'tech4', 'tech5', 'tech6']);
   input.hold = input.hold || {}; input.release = input.release || {};
   for (const b of layer.querySelectorAll('.tb')) {
     const act = b.dataset.act;
@@ -138,12 +145,9 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
     setSpecialReady(ready) { layer.querySelector('.tb-special').classList.toggle('ready', !!ready); },
     setMoves(moves) {
       const short = (s, d) => (s ? s.split('·').pop().trim() : d);
-      layer.querySelector('#tech1-label').textContent = short(moves && moves.l3, '마무리');
-      layer.querySelector('#tech2-label').textContent = short(moves && moves.rush, '돌진');
-      layer.querySelector('#tech3-label').textContent = short(moves && moves.heavy, '강공');
-      layer.querySelector('#tech4-label').textContent = short(moves && moves.special, '비검');
+      for (const el of layer.querySelectorAll('[data-l]')) el.textContent = short(moves && moves[el.dataset.l], el.textContent);
     },
-    setRushCd(frac) { const el = layer.querySelector('#tech2-cd'); el.style.height = `${frac * 100}%`; },
+    setCooldowns(cds) { for (const el of layer.querySelectorAll('[data-cd]')) { const v = cds[el.dataset.cd] || 0; const max = { rush: 3.5, flurry: 4.5, sweep: 6, wavecast: 5 }[el.dataset.cd] || 1; el.style.height = `${Math.min(1, v / max) * 100}%`; } },
     showAimHint(on) { layer.querySelector('#aim-hint').classList.toggle('show', !!on); },
     setPotions(n) { layer.querySelector('#tb-potion-n').textContent = n; layer.querySelector('.tb-potion').classList.toggle('empty', n <= 0); },
     setSound(muted) { layer.querySelector('#tb-sound').textContent = muted ? '소리 꺼짐' : '소리 켜짐'; },

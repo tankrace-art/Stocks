@@ -42,6 +42,24 @@ const ATTACKS = {
     fx: { sweep: -1, tilt: 0.1, roll: 0.3, color: 0xffffff, y: 1.0, rOut: 2.2 }, stagger: 0.5, hitstop: 0.05, shake: 0.25,
     next: null, rush: true, cooldown: 3.5,
   },
+  flurry: {
+    dur: 0.95, active: [0.1, 0.8], dmg: 7, range: 2.4, arc: 2.0, knock: 1.5, gauge: 4, lunge: 1.2, multi: 4,
+    windup: { x: -1.2, y: -1.2, z: 0 }, end: { x: -1.2, y: 1.2, z: 0 },
+    fx: { sweep: 1, tilt: 0.1, roll: 0, color: 0xffffff, y: 1.1, rOut: 2.3 }, stagger: 0.15, hitstop: 0.02, shake: 0.08,
+    next: null, cooldown: 4.5,
+  },
+  sweep: {
+    dur: 0.8, active: [0.32, 0.52], dmg: 26, range: 3.0, arc: 4.7, knock: 9, gauge: 12, lunge: 0,
+    windup: { x: -1.1, y: -1.8, z: 0.2 }, end: { x: -1.1, y: 1.8, z: -0.2 },
+    fx: { sweep: 1, tilt: 0.05, roll: 0, color: 0xffffff, y: 1.1, rOut: 3.0 }, stagger: 0.8, hitstop: 0.08, shake: 0.4,
+    next: null, cooldown: 6,
+  },
+  wavecast: {
+    dur: 0.7, active: [0.9, 0.95], dmg: 0, range: 0, arc: 0, knock: 0, gauge: 0, lunge: 0, castWave: true,
+    windup: { x: -2.4, y: 0.4, z: 0 }, end: { x: -0.8, y: -0.3, z: 0 },
+    fx: { sweep: 0, tilt: -1.2, roll: 0, color: 0xffffff, y: 1.2, rOut: 2.2 }, stagger: 0, hitstop: 0, shake: 0.2,
+    next: null, cooldown: 5,
+  },
   special: {
     dur: 1.35, active: [0.28, 0.62], dmg: 55, range: 4.6, arc: Math.PI * 2 + 1, knock: 13, gauge: 0, lunge: 0,
     windup: { x: -1.4, y: -1.2, z: 0 }, end: { x: -1.4, y: -1.2, z: 0 },
@@ -369,7 +387,7 @@ export class Player {
     this.lookIdle = 10;     // 마지막 수동 시점 조작 후 경과 시간
     this.aim = null;        // 조준 중: { act, t, yaw }
     this.aimMesh = null;
-    this.rushCd = 0;
+    this.cds = { rush: 0, flurry: 0, sweep: 0, wavecast: 0 };
     this.camTarget = null;  // 소프트 록온 대상
     this._camPos = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
@@ -458,10 +476,11 @@ export class Player {
     input.dash = false;
 
     // ---- 공격 입력: 짧게 누르면 즉시, 길게 누르면 조준(부채꼴 표시) 후 떼면 발동 ----
-    this.rushCd = Math.max(0, this.rushCd - dt);
+    for (const k in this.cds) this.cds[k] = Math.max(0, this.cds[k] - dt);
     const HOLD = 0.2;
-    const acts = ['light', 'heavy', 'tech1', 'tech2'];
-    const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' };
+    const acts = ['light', 'heavy', 'tech1', 'tech2', 'tech4', 'tech5', 'tech6'];
+    const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush', tech4: 'flurry', tech5: 'sweep', tech6: 'wavecast' };
+    const onCd = (name) => this.cds[name] !== undefined && this.cds[name] > 0;
     const hold = input.hold || {}, release = input.release || {};
     if (!this.aim) {
       for (const a of acts) if (hold[a] && (hold[a] += dt) >= HOLD && !(this.attack && this.attack.def.special)) {
@@ -478,7 +497,7 @@ export class Player {
       if (release[a.act] || !hold[a.act]) {
         this._hideAim();
         const name = actToAttack[a.act] || 'light1';
-        if (!(name === 'rush' && this.rushCd > 0)) { this.yaw = a.yaw; this._startAttack(name, ctx, { aimed: true }); }
+        if (!onCd(name)) { this.yaw = a.yaw; this._startAttack(name, ctx, { aimed: true }); }
         this.aim = null;
       }
     } else {
@@ -486,7 +505,7 @@ export class Player {
       for (const a of acts) {
         if (!release[a]) continue;
         const name = actToAttack[a];
-        if (name === 'rush' && this.rushCd > 0) continue;
+        if (onCd(name)) continue;
         if (!this.attack) this._startAttack(name, ctx);
         else if (!this.attack.def.special && this.attack.t >= this.attack.def.active[0]) {
           if (a === 'light' && this.attack.def.next) this.queued = this.attack.def.next;
@@ -569,7 +588,7 @@ export class Player {
     if (!def) return;
     this.attack = { name, def, t: 0, hitSet: new Set(), fxDone: false, waveDone: false, waveCount: 0, aimed: !!opt.aimed };
     this.queued = null;
-    if (def.rush) this.rushCd = def.cooldown;
+    if (def.cooldown) this.cds[name] = def.cooldown;
     if (name.startsWith('light')) { this.nextLight = def.next || 'light1'; this.comboResetTimer = 0.55; }
     else this.nextLight = 'light1';
     if (!opt.aimed && (!this.moving || def.special)) this.yaw = this.camYaw + Math.PI;
@@ -594,6 +613,9 @@ export class Player {
     if (name === 'light3' && mv.l3) this.events.push({ type: 'move', name: mv.l3, tier: 1 });
     if (name === 'heavy' && mv.heavy) this.events.push({ type: 'move', name: mv.heavy, tier: 2 });
     if (name === 'rush') { this.events.push({ type: 'move', name: mv.rush || '돌진 베기', tier: 2 }); this.invuln = Math.max(this.invuln, 0.35); }
+    if (name === 'flurry') this.events.push({ type: 'move', name: mv.flurry || '연참', tier: 2 });
+    if (name === 'sweep') this.events.push({ type: 'move', name: mv.sweep || '회전 베기', tier: 2 });
+    if (name === 'wavecast') this.events.push({ type: 'move', name: mv.wave || '검기 발사', tier: 2 });
     if (def.special) {
       const sp = this.ch.special;
       this.events.push({ type: 'move', name: mv.special || sp.name, tier: 3 });
@@ -621,6 +643,17 @@ export class Player {
       // 호흡 연출: 검격마다 테마 파티클
       this._themeBurst(ctx, d.special ? 3 : d.heavy || a.name === 'light3' ? 2 : 1, fx.sweep, rOut);
     }
+    if (d.multi) {
+      // 연참: 활성 구간을 나눠 여러 번 판정 + 궤적
+      const seg = (ae - as) / d.multi;
+      const idx = Math.floor((a.t - as) / seg);
+      if (a.t >= as && a.t <= ae && idx !== a.multiIdx) {
+        a.multiIdx = idx; a.hitSet = new Set();
+        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut: d.range, angle: 1.8, tilt: (idx % 2 ? -0.5 : 0.5), roll: 0, color: sp.c1, life: 0.16, sweep: idx % 2 ? -1 : 1, y: 1.0 + (idx % 2) * 0.25 });
+        this.events.push({ type: 'swing', heavy: false });
+      }
+    }
+    if (d.castWave && !a.waveDone && a.t >= 0.3) { a.waveDone = true; this._launchWave(ctx, 0, 0.7); this.events.push({ type: 'wave' }); }
     if (a.t >= as && a.t <= ae) {
       this._hitCheck(a, ctx, range, heavyPlus);
       if (d.special) this._specialParticles(ctx, a.t);
@@ -645,11 +678,11 @@ export class Player {
 
   // 조준 부채꼴 표시
   _showAim(ctx, a) {
-    const name = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' }[a.act] || 'light1';
+    const name = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush', tech4: 'flurry', tech5: 'sweep', tech6: 'wavecast' }[a.act] || 'light1';
     const def = ATTACKS[name];
     const sp = this.ch.special;
-    const range = def.rush ? 6.5 : def.range * (def.heavy && this.skill.heavyPlus ? 1.4 : 1) + 0.3;
-    const angle = def.rush ? 0.5 : Math.min(def.arc, Math.PI * 1.1);
+    const range = def.rush ? 6.5 : def.castWave ? 14 : def.range * (def.heavy && this.skill.heavyPlus ? 1.4 : 1) + 0.3;
+    const angle = def.rush ? 0.5 : def.castWave ? 0.4 : Math.min(def.arc, Math.PI * 1.15);
     if (!this.aimMesh || this.aimMesh.userData.key !== name) {
       this._hideAim();
       const geo = ctx.effects._arcGeo(0.3, range, angle);
@@ -733,7 +766,7 @@ export class Player {
     if (theme === 'lightning' && Math.random() < 0.2) ctx.effects.burst(c, { count: 6, colors: [0xffffff], speed: 1, life: 0.1, size: 1.6, gravity: 0, drag: 0 });
   }
 
-  _launchWave(ctx, spread = 0) {
+  _launchWave(ctx, spread = 0, power = 1) {
     const sp = this.ch.special;
     const geo = ctx.effects._arcGeo(0.9, 1.9, 2.3);
     const m = new THREE.MeshBasicMaterial({ color: sp.c1, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true });
@@ -744,7 +777,8 @@ export class Player {
     mesh.position.set(this.pos.x, 1.2, this.pos.z);
     this.scene.add(mesh);
     const dir = new THREE.Vector3(Math.sin(this.yaw + spread), 0, Math.cos(this.yaw + spread));
-    this.waves.push({ mesh, mat: m, dir, life: 1.4, maxLife: 1.4, hitSet: new Set(), speed: sp.waveSpeed || 15 });
+    if (power !== 1) mesh.scale.setScalar(power);
+    this.waves.push({ mesh, mat: m, dir, life: 1.4, maxLife: 1.4, hitSet: new Set(), speed: sp.waveSpeed || 15, power });
   }
 
   _updateWaves(dt, ctx) {
@@ -769,7 +803,7 @@ export class Player {
         if (Math.abs(along) < 1.2 + e.radius && lateral < 1.9 * s + e.radius) {
           w.hitSet.add(e);
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
-          this._applyHit(e, { dmg: 45 * this.skill.dmgMul * this.skill.specialMul, knock: 10, stagger: 0.8, gauge: 0, hitstop: 0.06, shake: 0.3, special: true }, dir, ctx);
+          this._applyHit(e, { dmg: 45 * (w.power || 1) * this.skill.dmgMul * (w.power === 1 ? this.skill.specialMul : 1), knock: 10, stagger: 0.8, gauge: w.power === 1 ? 0 : 6, hitstop: 0.06, shake: 0.3, special: w.power === 1 }, dir, ctx);
         }
       }
       for (const p of ctx.projectiles) {

@@ -100,6 +100,7 @@ export class Enemy {
     if (!this.targetable) return false;
     this.hp -= dmg;
     this.hitFlash = 1;
+    this.sinceHit = 0;
     const kMul = this.isBoss ? 0.12 : 1;
     this.knock.addScaledVector(dir, knock * kMul);
     // 보스는 경직에 강한 저항
@@ -112,7 +113,7 @@ export class Enemy {
   die(effects) {
     if (this.cfg && this.cfg.undying && !this.dissolving) {
       // 무잔: 죽지 않고 재생. 새벽(햇빛)만이 소멸시킨다
-      this.hp = Math.round(this.maxHp * 0.2); this.regenT = 3.0; this.stagger = 1.2;
+      this.hp = this.maxHp; this.regenT = 0; this.stagger = 1.5;
       effects.burst(this.center, { count: 60, colors: [0xff2040, 0xffffff, 0x8a1030], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
       effects.shockwave(this.pos, { color: 0xff2040, radius: 8, life: 0.8 });
       this.onRegen && this.onRegen(this);
@@ -168,6 +169,13 @@ export class Enemy {
   update(dt, ctx) {
     this.stateT += dt;
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
+    // 도깨비의 재생: 잠시 안 맞으면 체력이 차오른다 (원작처럼 빨리 베어야 함)
+    this.sinceHit = (this.sinceHit || 0) + dt;
+    if (this.alive && this.state !== 'spawn' && this.sinceHit > 2.5 && this.hp < this.maxHp) {
+      const rate = this.isBoss ? (this.muzan ? 0.03 : this.upper ? 0.02 : 0.012) : 0.02;
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * rate * dt);
+      if (Math.random() < 0.08) ctx.effects.emit({ pos: this.center, vel: new THREE.Vector3(rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5)), life: 0.5, size: 0.3, color: 0xff3050, drag: 1 });
+    }
     this.stagger = Math.max(0, this.stagger - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
@@ -313,6 +321,9 @@ export class MeleeYokai extends Enemy {
     if (this.state === 'chase') {
       this._faceTo(ang, dt);
       if (!p.alive) return;
+      // 혈귀술: 도약 베기(중거리) / 회전 베기(근접, 확률)
+      if (!this.isBoss && this.attackCooldown <= 0 && d > 3.2 && d < 7.5 && Math.random() < 0.6) { this.setState('lunge'); this.hit = false; this.lungeDir = new THREE.Vector3(dx / d, 0, dz / d); return; }
+      if (!this.isBoss && this.attackCooldown <= 0 && d <= this.attackRange + 0.5 && Math.random() < 0.3) { this.setState('spin'); this.hit = false; return; }
       if (d > this.attackRange) this._moveTowards(dx, dz, d, dt);
       else if (this.attackCooldown <= 0) { this.setState('attack'); this.hit = false; }
       // 살짝 주위를 도는 움직임
@@ -330,7 +341,33 @@ export class MeleeYokai extends Enemy {
         const cosA = (dx * fx + dz * fz) / Math.max(d, 1e-4);
         if (d < this.attackRange + p.radius + 0.3 && cosA > 0.3) p.takeDamage(this.dmg, this.pos, ctx.effects);
       }
-      if (t >= 1.05) { this.setState('chase'); this.attackCooldown = rand(1.4, 2.4); }
+      if (t >= 1.05) { this.setState('chase'); this.attackCooldown = rand(1.1, 1.9); }
+    } else if (this.state === 'lunge') {
+      const t = this.stateT;
+      if (t < 0.4) { this._faceTo(ang, dt, 8); if (Math.random() < 0.5) ctx.effects.emit({ pos: this.center, vel: new THREE.Vector3(0, 1.5, 0), life: 0.3, size: 0.4, color: 0xff3050 }); }
+      else if (t < 0.75) {
+        this.pos.addScaledVector(this.lungeDir, 15 * dt);
+        if (!this.hit) {
+          for (const tg of [p, ...(ctx.allies || [])]) {
+            if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < this.radius + tg.radius + 0.5) {
+              this.hit = true; tg.takeDamage(Math.round(this.dmg * 1.2), this.pos, ctx.effects);
+              ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.3, rOut: 2.0, angle: 1.4, tilt: -0.4, color: 0xff3050, life: 0.2, sweep: 1, y: 1.0, opacity: 0.6 });
+              break;
+            }
+          }
+        }
+      }
+      if (t >= 1.0) { this.setState('chase'); this.attackCooldown = rand(1.6, 2.6); }
+    } else if (this.state === 'spin') {
+      const t = this.stateT;
+      if (t >= 0.45 && !this.hit) {
+        this.hit = true;
+        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.3, rOut: 2.6, angle: Math.PI * 1.1, tilt: 0.1, color: 0xff3050, life: 0.25, sweep: 1, y: 1.0, opacity: 0.6 });
+        ctx.effects.slashArc(this.pos, this.yaw + Math.PI, { rIn: 0.3, rOut: 2.6, angle: Math.PI * 1.1, tilt: 0.1, color: 0xff3050, life: 0.25, sweep: 1, y: 1.0, opacity: 0.6 });
+        ctx.sfx && ctx.sfx('swingHeavy');
+        for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < 2.7 + tg.radius) tg.takeDamage(Math.round(this.dmg * 1.3), this.pos, ctx.effects);
+      }
+      if (t >= 0.9) { this.setState('chase'); this.attackCooldown = rand(1.8, 2.8); }
     }
   }
 
@@ -350,12 +387,68 @@ export class MeleeYokai extends Enemy {
       lean = 0.15;
     } else if (this.state === 'hurt') {
       lean = -0.3;
+    } else if (this.state === 'lunge') {
+      ax = t < 0.4 ? -2.4 : -0.6; lean = t < 0.4 ? -0.2 : 0.35;
+    } else if (this.state === 'spin') {
+      ax = -1.2; ay = Math.sin(t * 14) * 1.2; lean = 0.15;
     }
     this.armR.rotation.x = damp(this.armR.rotation.x, ax, 25, dt);
     this.armR.rotation.y = damp(this.armR.rotation.y, ay, 25, dt);
     this.group.rotation.x = damp(this.group.rotation.x, this.state === 'dead' ? this.group.rotation.x : lean, 12, dt);
     // 공격 준비 시 눈 붉게
-    this.eyeMat.emissive.setHex(this.state === 'attack' && t < 0.65 ? 0xff2020 : 0xffe08a);
+    this.eyeMat.emissive.setHex((this.state === 'attack' && t < 0.65) || (this.state === 'lunge' && t < 0.4) || (this.state === 'spin' && t < 0.45) ? 0xff2020 : 0xffe08a);
+  }
+}
+
+// ---------- 거구 도깨비: 크고 느리지만 내려찍기·돌진 ----------
+export class BruteYokai extends MeleeYokai {
+  constructor(scene, pos, mul) {
+    super(scene, pos, mul);
+    this.name = '거구 도깨비'; this.kind = 'brute';
+    this.hp = this.maxHp = Math.round(120 * this.mul.hp);
+    this.speed = 2.9; this.scaleBase = 1.7; this.radius = 0.85; this.height = 2.9;
+    this.dmg = Math.round(14 * this.mul.dmg); this.attackRange = 2.8;
+    for (const m of this.mats) if (m.m.color && m.m.color.getHex() === 0xb8322a) m.m.color.setHex(0x5a2a5a);
+  }
+  behave(dt, ctx) {
+    const p = this._target(ctx);
+    const { dx, dz, d, ang } = this._toPlayer(p);
+    if (this.state === 'chase') {
+      this._faceTo(ang, dt, 5);
+      if (!p.alive) return;
+      if (this.attackCooldown <= 0 && d > 6 && Math.random() < 0.5) { this.setState('charge'); this.hit = false; this.charge = null; return; }
+      if (d > this.attackRange) this._moveTowards(dx, dz, d, dt); else if (this.attackCooldown <= 0) { this.setState('slam'); this.hit = false; }
+    } else if (this.state === 'slam') {
+      const t = this.stateT;
+      if (t < 0.8) this._faceTo(ang, dt, 3);
+      if (t >= 0.8 && !this.hit) {
+        this.hit = true;
+        const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+        const impact = new THREE.Vector3(this.pos.x + fx * 2, 0, this.pos.z + fz * 2);
+        ctx.effects.shockwave(impact, { color: 0xff6060, radius: 3.5, life: 0.5, y: 0.1 }); ctx.effects.addShake(0.5); ctx.sfx && ctx.sfx('slam');
+        for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - impact.x, tg.pos.z - impact.z) < 3.3) tg.takeDamage(this.dmg, impact, ctx.effects);
+      }
+      if (t >= 1.4) { this.setState('chase'); this.attackCooldown = rand(1.4, 2.2); }
+    } else if (this.state === 'charge') {
+      const t = this.stateT;
+      if (t < 0.6) this._faceTo(ang, dt, 6);
+      else if (t < 1.3) {
+        if (!this.charge) this.charge = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+        this.pos.addScaledVector(this.charge, 12 * dt);
+        if (!this.hit) for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < this.radius + tg.radius + 0.5) { this.hit = true; tg.takeDamage(Math.round(this.dmg * 0.9), this.pos, ctx.effects); }
+        if (!ctx.stage.inBounds(this.pos.x, this.pos.z, this.radius + 0.3)) this.stateT = 1.3;
+      }
+      if (t >= 1.8) { this.setState('chase'); this.attackCooldown = rand(1.6, 2.4); }
+    }
+  }
+  animate(dt) {
+    const t = this.stateT; let ax = 0.2, lean = 0;
+    if (this.state === 'slam') { ax = t < 0.8 ? -2.8 : -0.4; lean = t < 0.8 ? -0.2 : 0.3; }
+    else if (this.state === 'charge') { ax = -1.0; lean = t < 0.6 ? -0.2 : 0.35; }
+    else if (this.state === 'chase') { const w = performance.now() * 0.008 + this.id; this.legs[0].rotation.x = Math.sin(w) * 0.5; this.legs[1].rotation.x = -Math.sin(w) * 0.5; ax = 0.2 + Math.sin(w) * 0.2; lean = 0.1; }
+    this.armR.rotation.x = damp(this.armR.rotation.x, ax, 18, dt);
+    if (this.state !== 'dead') this.group.rotation.x = damp(this.group.rotation.x, lean, 10, dt);
+    this.eyeMat.emissive.setHex((this.state === 'slam' && t < 0.8) || (this.state === 'charge' && t < 0.6) ? 0xff2020 : 0xffe08a);
   }
 }
 
@@ -420,7 +513,15 @@ export class RangedYokai extends Enemy {
       else if (d > this.preferMax) this._moveTowards(dx, dz, d, dt);
       // 측면 이동
       if (d > 1e-3) { this.pos.x += (-dz / d) * this.strafe * 1.6 * dt; this.pos.z += (dx / d) * this.strafe * 1.6 * dt; }
-      if (this.fireCooldown <= 0 && d < 18) { this.setState('cast'); }
+      if (d < 3 && this.attackCooldown <= 0) {
+        // 혈귀술: 순간이동 후퇴
+        this.attackCooldown = 4;
+        ctx.effects.mist(this.center, [0x70d0ff, 0xffffff], 14);
+        const nx = this.pos.x - dx / d * 6, nz = this.pos.z - dz / d * 6;
+        this.pos.set(nx, this.pos.y, nz); ctx.stage.resolveCollisions(this.pos, this.radius);
+        ctx.effects.mist(this.center, [0x70d0ff, 0xffffff], 14); ctx.sfx && ctx.sfx('dash');
+      }
+      if (this.fireCooldown <= 0 && d < 18) { this.setState('cast'); this.castFan = Math.random() < 0.45; }
     } else if (this.state === 'cast') {
       const t = this.stateT;
       if (t < 0.6) {
@@ -434,11 +535,14 @@ export class RangedYokai extends Enemy {
         const target = new THREE.Vector3(p.pos.x, p.pos.y + 1.0, p.pos.z);
         // 약간의 리드
         const dir = target.sub(src).normalize();
-        ctx.spawnProjectile(src, dir, { speed: 9, dmg: Math.round(7 * this.mul.dmg), color: 0x60c0ff });
+        if (this.castFan) {
+          const base = Math.atan2(dir.x, dir.z);
+          for (const off of [-0.25, 0, 0.25]) ctx.spawnProjectile(src.clone(), new THREE.Vector3(Math.sin(base + off), dir.y, Math.cos(base + off)), { speed: 10, dmg: Math.round(6 * this.mul.dmg), color: 0xa0e0ff, size: 0.24 });
+        } else ctx.spawnProjectile(src, dir, { speed: 10, dmg: Math.round(8 * this.mul.dmg), color: 0x60c0ff });
         ctx.sfx && ctx.sfx('fire');
         ctx.effects.burst(src, { count: 8, colors: [0x70d0ff, 0xffffff], speed: 2, life: 0.3, size: 0.3, gravity: 0, drag: 2 });
       }
-      if (t >= 1.0) { this.setState('chase'); this.fired = false; this.fireCooldown = rand(2.6, 4.0); }
+      if (t >= 1.0) { this.setState('chase'); this.fired = false; this.fireCooldown = rand(2.0, 3.2); }
     }
   }
 
@@ -483,6 +587,14 @@ export class BossOni extends MeleeYokai {
     this.skills = cfg.skills || ['slam', 'charge'];
     this.cfg.chargeSpeed = cfg.chargeSpeed || 16;
     this.regenT = 0; this.lastHitT = 0;
+    // 등급: 하현 = 어려움, 상현 = 매우 어려움, 무잔 = 매우 어려움+
+    this.muzan = /무잔/.test(cfg.name);
+    this.upper = /상현/.test(cfg.name) || this.muzan;
+    this.lower = /하현/.test(cfg.name);
+    const tier = this.muzan ? { hp: 1.6, dmg: 1.6, spd: 4.0 } : this.upper ? { hp: 1.45, dmg: 1.4, spd: 3.8 } : this.lower ? { hp: 1.15, dmg: 1.15, spd: 3.3 } : { hp: 1, dmg: 1, spd: 3.0 };
+    this.hp = this.maxHp = Math.round(this.maxHp * tier.hp); this.dmg = Math.round(this.dmg * tier.dmg); this.speed = tier.spd;
+    this.tierName = this.muzan ? '무잔' : this.upper ? '상현' : this.lower ? '하현' : '도깨비';
+    this.chain = 0;
     for (const e of this.mats) {
       if (e.m.color && e.m.color.getHex() === 0xb8322a) e.m.color.setHex(cfg.body);
       if (e.m.color && e.m.color.getHex() === 0xd9a640) e.m.color.setHex(cfg.loin);
@@ -511,12 +623,14 @@ export class BossOni extends MeleeYokai {
     const { dx, dz, d, ang } = this._toPlayer(p);
     // 불사 재생
     if (this.cfg.undying && this.regenT > 0) { this.regenT -= dt; this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.12 * dt); }
-    if (this.hp < this.maxHp * 0.5 && this.phase === 1) {
-      this.phase = 2;
-      ctx.onBossPhase && ctx.onBossPhase(this);
+    const frac = this.hp / this.maxHp;
+    if ((frac < 0.65 && this.phase === 1) || (frac < 0.3 && this.phase === 2)) {
+      this.phase++;
+      ctx.onBossPhase && ctx.onBossPhase(this, this.phase);
       ctx.sfx && ctx.sfx('roar');
       ctx.effects.shockwave(this.pos, { color: this.eyeColor, radius: 9, life: 0.9, y: 0.1 });
       ctx.effects.burst(this.center, { count: 60, colors: [this.eyeColor, 0x8a1030, 0xffffff], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
+      this.stagger = 0; this.attackCooldown = 0.3;
     }
     const t = this.stateT;
     if (this.state === 'chase') {
@@ -639,7 +753,14 @@ export class BossOni extends MeleeYokai {
     }
   }
 
-  _endSkill(a, b) { this.setState('chase'); this.attackCooldown = rand(a, b) * (this.phase === 2 ? 0.7 : 1); if (this.beamMesh) { this.beamMesh.userData.dead = true; this.beamMesh = null; } }
+  _endSkill(a, b) {
+    this.setState('chase');
+    const mul = (this.phase === 3 ? 0.5 : this.phase === 2 ? 0.7 : 1) * (this.muzan ? 0.65 : this.upper ? 0.75 : this.lower ? 0.9 : 1);
+    this.attackCooldown = rand(a, b) * mul;
+    // 3페이즈(또는 상현 2페이즈): 기술을 연달아 쓴다
+    if ((this.phase === 3 || (this.upper && this.phase >= 2)) && this.chain < 1 && Math.random() < 0.6) { this.chain++; this.attackCooldown = 0.15; } else this.chain = 0;
+    if (this.beamMesh) { this.beamMesh.userData.dead = true; this.beamMesh = null; }
+  }
 
   _hitTargets(ctx, test, dmg, from, onHit) {
     for (const tg of [ctx.player, ...(ctx.allies || [])]) {
@@ -701,6 +822,7 @@ export class EnemyManager {
     this.waves = (chapter && chapter.waves) || WAVES;
     this.scale = (chapter && chapter.scale) || { hp: 1, dmg: 1 };
     this.bossCfg = (chapter && chapter.boss) || DEFAULT_BOSS;
+    this.chapterId = (chapter && chapter.id) || 1;
     this.list = [];
     this.projectiles = [];
     this.waveIndex = -1;
@@ -741,16 +863,20 @@ export class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
+      if (this._ctx) this._normalize(this.boss, this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12, this._ctx);
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
       // 보스와 함께 잡귀 소수
       if (w.melee) for (let i = 0; i < w.melee; i++) this.spawnQueue.push({ t: 1 + i * 0.4, type: 'melee' });
+      if (this.chapterId >= 5) this.spawnQueue.push({ t: 6, type: 'ranged' }, { t: 6.5, type: 'ranged' });
       return;
     }
     let delay = 0;
     for (let i = 0; i < w.melee; i++) { this.spawnQueue.push({ t: delay, type: 'melee' }); delay += 0.35; }
     for (let i = 0; i < w.ranged; i++) { this.spawnQueue.push({ t: delay, type: 'ranged' }); delay += 0.35; }
+    const brutes = w.brute !== undefined ? w.brute : (this.chapterId >= 3 ? 1 + Math.floor((this.chapterId - 3) / 2) : 0);
+    for (let i = 0; i < brutes; i++) { this.spawnQueue.push({ t: delay, type: 'brute' }); delay += 0.5; }
   }
 
   spawnProjectile(pos, dir, opts) {
@@ -765,9 +891,17 @@ export class EnemyManager {
     for (const p of this.projectiles) p.destroy(effects);
   }
 
+  // 플레이어의 평균 한 타 피해 (체력 정규화 기준)
+  playerHit(ctx) { const p = ctx.player; return 15 * ((p && p.skill && p.skill.dmgMul) || 1); }
+  _normalize(e, hits, ctx) {
+    e.maxHp = Math.max(10, Math.round(hits * this.playerHit(ctx)));
+    e.hp = e.maxHp; e.hitsToKill = hits;
+  }
+
   update(dt, ctx) {
     const player = ctx.player;
     this.stage = ctx.stage;
+    this._ctx = ctx;
     ctx.enemies = this.list;
     ctx.pickups = this.pickups;
     ctx.projectiles = this.projectiles;
@@ -782,7 +916,9 @@ export class EnemyManager {
         s.t -= dt;
         if (s.t <= 0) {
           const pos = this._spawnPos(player);
-          const e = s.type === 'melee' ? new MeleeYokai(this.scene, pos, this.scale) : new RangedYokai(this.scene, pos, this.scale);
+          const ms = this.minionScale || (this.minionScale = { hp: this.scale.hp * 0.7, dmg: this.scale.dmg * 0.65 });
+          const e = s.type === 'melee' ? new MeleeYokai(this.scene, pos, ms) : s.type === 'brute' ? new BruteYokai(this.scene, pos, ms) : new RangedYokai(this.scene, pos, ms);
+          this._normalize(e, s.type === 'brute' ? 8 : s.type === 'ranged' ? 3 : 4, ctx);
           this.list.push(e);
           ctx.effects.mist(new THREE.Vector3(pos.x, 0.5, pos.z), undefined, 25);
           ctx.sfx && ctx.sfx('spawn');

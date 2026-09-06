@@ -25,6 +25,7 @@ export class UI {
           <div id="res-row">
             <span id="potion-hud"><span class="ic">${ICONS.potion}</span><span id="potion-text">×0</span><span class="key">Q</span></span>
             <span id="gold-hud"><span class="ic">${ICONS.gold}</span><span id="gold-text">0</span></span>
+            <span id="lives-hud" title="재도전 기회">♥♥♥</span>
           </div>
           <div id="allies"></div>
           <div id="log"></div>
@@ -40,7 +41,7 @@ export class UI {
         <div id="message"><div id="msg-title"></div><div id="msg-sub"></div></div>
         <div id="vignette"></div>
         <div id="dash-cd"></div>
-        <div id="key-hints">Tab 장비·스킬·상점 · Q 회복약 · M 소리 · Esc 일시정지</div>
+        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Tab 메뉴 · Q 회복약 · M 소리 · Esc 일시정지</div>
       </div>
       <div id="screen" class="screen">
         <div class="panel">
@@ -85,7 +86,7 @@ export class UI {
     this.$('menu-close').addEventListener('click', () => this.onMenuClose && this.onMenuClose());
     this.$('story-cta').addEventListener('click', () => this.onStoryDone && this.onStoryDone());
     this.$('world-close').addEventListener('click', () => { this.hideWorld(); this.onWorldClose && this.onWorldClose(); });
-    this.onChapterPick = null; this.onWorldClose = null; this.onWorld = null;
+    this.onChapterPick = null; this.onWorldClose = null; this.onWorld = null; this.onDifficulty = null;
   }
 
   // ---------- 미니맵 ----------
@@ -213,6 +214,7 @@ export class UI {
     this.el['chapter-text'].textContent = chapter ? `${chapter.title} · ${chapter.name}` : '';
     this.el['kill-text'].textContent = `토벌 ${kills}`;
   }
+  setLives(n) { const el = this.$('lives-hud'); if (el) el.textContent = '♥'.repeat(Math.max(0, n)) + '♡'.repeat(Math.max(0, 3 - n)); }
   setDash(cdFrac) { this.el['dash-cd'].style.opacity = cdFrac > 0 ? 0.8 : 0.25; this.el['dash-cd'].style.setProperty('--cd', `${(1 - cdFrac) * 100}%`); }
   message(title, sub = '', duration = 3.2) {
     this.el['msg-title'].textContent = title; this.el['msg-sub'].textContent = sub;
@@ -244,6 +246,7 @@ export class UI {
           <button id="btn-new" class="big ${cont ? '' : 'primary'}">새로 시작<span>검사 선택</span></button>
           ${cont ? '<button id="btn-world" class="big">세계 지도<span>지역 고르기</span></button>' : ''}
         </div>
+        <div class="diff-row">난이도 ${Object.entries(stats.difficulties || {}).map(([k, v]) => `<button class="diff ${k === stats.difficulty ? 'on' : ''}" data-diff="${k}">${v.name}</button>`).join('')}</div>
         ${this.touch ? `<table class="controls compact">
           <tr><td>왼쪽 화면</td><td>드래그로 이동</td></tr>
           <tr><td>오른쪽 화면</td><td>드래그로 시점 · 탭으로 베기</td></tr>
@@ -251,12 +254,14 @@ export class UI {
         </table><p class="tip">가로 화면을 권장합니다</p>` : `<table class="controls compact">
           <tr><td>W A S D · 마우스</td><td>이동 · 시점</td></tr>
           <tr><td>좌클릭 / 우클릭 / Shift</td><td>3연타 / 강공격 / 대시</td></tr>
-          <tr><td>F · Q · Tab · M</td><td>비검 · 회복약 · 장비/스킬/상점 · 소리</td></tr>
+          <tr><td>1~6 · 7/F</td><td>호흡 제1형~제6형 · 제7형(오의)</td></tr>
+          <tr><td>Q · Tab · M</td><td>회복약 · 장비/스킬/상점/지도 · 소리</td></tr>
         </table>`}`;
       c.textContent = '';
       const bc = this.$('btn-continue'); if (bc) bc.addEventListener('click', (e) => { e.stopPropagation(); this.onContinue && this.onContinue(); });
       this.$('btn-new').addEventListener('click', (e) => { e.stopPropagation(); this.onNew && this.onNew(); });
       const bw = this.$('btn-world'); if (bw) bw.addEventListener('click', (e) => { e.stopPropagation(); this.onWorld && this.onWorld(); });
+      for (const d of this.screen.querySelectorAll('.diff')) d.addEventListener('click', (e) => { e.stopPropagation(); this.onDifficulty && this.onDifficulty(d.dataset.diff); for (const x of this.screen.querySelectorAll('.diff')) x.classList.toggle('on', x === d); });
     } else if (kind === 'pause') {
       t.textContent = '일시정지'; s.textContent = '숨을 고른다';
       b.innerHTML = this.touch ? '' : '<p class="tip">Tab — 장비·스킬·상점 · M — 소리</p>';

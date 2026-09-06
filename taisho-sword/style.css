@@ -99,7 +99,7 @@ body.touch #crosshair { display: none; }
 #stick { position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px; display: none; pointer-events: none; }
 #stick-base { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(243, 233, 216, 0.45); background: rgba(8, 10, 20, 0.35); }
 #stick-knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(243, 233, 216, 0.75); box-shadow: 0 0 12px rgba(0,0,0,0.6); }
-#btns { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); width: 230px; height: 230px; pointer-events: none; }
+#btns { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(132px + env(safe-area-inset-bottom)); width: 230px; height: 200px; pointer-events: none; }
 .tb { position: absolute; pointer-events: auto; border-radius: 50%; border: 2px solid rgba(243, 233, 216, 0.55); background: rgba(8, 10, 20, 0.55); color: var(--ink); font-family: var(--serif); font-weight: 700; touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; padding: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.6); transition: transform 0.06s, background 0.06s; }
 .tb.on { transform: scale(0.92); background: rgba(184, 50, 42, 0.85); }
 .tb-light { right: 0; bottom: 0; width: 92px; height: 92px; font-size: 32px; }
@@ -303,10 +303,11 @@ body.touch #move { right: 26%; top: 30%; }
 body.touch .doll { transform: scale(0.92); transform-origin: top center; }
 
 /* 기술 버튼 줄 (오른쪽 조작키 아래) */
-#tech-row { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 8px; }
-#tech-row .tb.tech { position: static; width: 84px; height: 60px; overflow: hidden; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+#tech-row { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.tech-line { display: flex; gap: 6px; }
+#tech-row .tb.tech { position: static; width: 76px; height: 52px; overflow: hidden; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 #tech-row .tb.tech small { font-size: 10px; color: var(--ink-dim); letter-spacing: 0.15em; }
-#tech-row .tb.tech.tb-special { width: 104px; }
+#tech-row .tb.tech.tb-special { width: 112px; }
 body.touch #night { width: min(300px, 32vw); left: 42%; }
 @media (max-height: 460px) { #btns { bottom: calc(70px + env(safe-area-inset-bottom)); } #tech-row .tb.tech { width: 76px; height: 48px; font-size: 13px; } }
 
@@ -330,5 +331,11 @@ body.touch #minimap-wrap { left: 14px; top: 10px; width: 140px; } body.touch #mi
 
 #tech-row .tb.tech i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,0.55); pointer-events: none; }
 #tech-row .tb.tech { position: relative; }
-#aim-hint { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-size: 13px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
+#aim-hint { position: absolute; left: 50%; bottom: calc(130px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-size: 13px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
 #aim-hint.show { opacity: 1; }
+
+.diff-row { margin: 6px 0 10px; font-size: 12px; letter-spacing: 0.15em; color: var(--ink-dim); display: flex; gap: 6px; align-items: center; justify-content: center; }
+.diff { font-family: var(--serif); font-size: 12px; letter-spacing: 0.1em; padding: 5px 12px; border: 1px solid rgba(243,233,216,0.3); background: transparent; color: var(--ink); cursor: pointer; }
+.diff.on { border-color: var(--crimson); background: rgba(184,50,42,0.35); }
+
+#lives-hud { color: #ff6a80; letter-spacing: 0.1em; font-size: 14px; }

@@ -113,7 +113,7 @@ body.touch #crosshair { display: none; }
 #stick { position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px; display: none; pointer-events: none; }
 #stick-base { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(243, 233, 216, 0.45); background: rgba(8, 10, 20, 0.35); }
 #stick-knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(243, 233, 216, 0.75); box-shadow: 0 0 12px rgba(0,0,0,0.6); }
-#btns { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); width: 230px; height: 230px; pointer-events: none; }
+#btns { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(132px + env(safe-area-inset-bottom)); width: 230px; height: 200px; pointer-events: none; }
 .tb { position: absolute; pointer-events: auto; border-radius: 50%; border: 2px solid rgba(243, 233, 216, 0.55); background: rgba(8, 10, 20, 0.55); color: var(--ink); font-family: var(--serif); font-weight: 700; touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; padding: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.6); transition: transform 0.06s, background 0.06s; }
 .tb.on { transform: scale(0.92); background: rgba(184, 50, 42, 0.85); }
 .tb-light { right: 0; bottom: 0; width: 92px; height: 92px; font-size: 32px; }
@@ -317,10 +317,11 @@ body.touch #move { right: 26%; top: 30%; }
 body.touch .doll { transform: scale(0.92); transform-origin: top center; }
 
 /* 기술 버튼 줄 (오른쪽 조작키 아래) */
-#tech-row { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 8px; }
-#tech-row .tb.tech { position: static; width: 84px; height: 60px; overflow: hidden; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+#tech-row { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.tech-line { display: flex; gap: 6px; }
+#tech-row .tb.tech { position: static; width: 76px; height: 52px; overflow: hidden; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 #tech-row .tb.tech small { font-size: 10px; color: var(--ink-dim); letter-spacing: 0.15em; }
-#tech-row .tb.tech.tb-special { width: 104px; }
+#tech-row .tb.tech.tb-special { width: 112px; }
 body.touch #night { width: min(300px, 32vw); left: 42%; }
 @media (max-height: 460px) { #btns { bottom: calc(70px + env(safe-area-inset-bottom)); } #tech-row .tb.tech { width: 76px; height: 48px; font-size: 13px; } }
 
@@ -344,8 +345,14 @@ body.touch #minimap-wrap { left: 14px; top: 10px; width: 140px; } body.touch #mi
 
 #tech-row .tb.tech i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,0.55); pointer-events: none; }
 #tech-row .tb.tech { position: relative; }
-#aim-hint { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-size: 13px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
+#aim-hint { position: absolute; left: 50%; bottom: calc(130px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-size: 13px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
 #aim-hint.show { opacity: 1; }
+
+.diff-row { margin: 6px 0 10px; font-size: 12px; letter-spacing: 0.15em; color: var(--ink-dim); display: flex; gap: 6px; align-items: center; justify-content: center; }
+.diff { font-family: var(--serif); font-size: 12px; letter-spacing: 0.1em; padding: 5px 12px; border: 1px solid rgba(243,233,216,0.3); background: transparent; color: var(--ink); cursor: pointer; }
+.diff.on { border-color: var(--crimson); background: rgba(184,50,42,0.35); }
+
+#lives-hud { color: #ff6a80; letter-spacing: 0.1em; font-size: 14px; }
 
 </style>
 <canvas id="game"></canvas>
@@ -524,7 +531,7 @@ const CHARACTERS = [
     colors: { kimono: 0x1a3a3a, hakama: 0x1b1f33, haori: 0x1e4a3a, scarf: 0xf1e9d6, hair: 0x5a1e1e, obi: 0xf0e6d2, glow: 0x40a0ff, eye: 0x8a2a2a, pattern: 0x0e0e12 },
     look: { pattern: 'check', earring: true, scar: true, bangs: [0.22, 0.3, 0.2, 0.32, 0.22], browTilt: 0.2 },
     stats: { hp: 125, speed: 6.3, dmg: 1.0, gauge: 1.05, dashCooldown: 0.7 },
-    moves: { l3: '물의 호흡 제1형 · 물면 베기', rush: '물의 호흡 제2형 · 물수레', heavy: '물의 호흡 제4형 · 치는 파도', special: '히노카미 카구라 · 원무' },
+    moves: { l3: '물의 호흡 제1형 · 물면 베기', rush: '물의 호흡 제2형 · 물수레', heavy: '물의 호흡 제4형 · 치는 파도', flurry: '물의 호흡 제3형 · 유류무', sweep: '물의 호흡 제5형 · 간천의 자우', wave: '물의 호흡 제10형 · 생생유전', special: '히노카미 카구라 · 원무' },
     attackTheme: 'wave',
     special: { name: '히노카미 카구라 · 원무', theme: 'flame', c1: 0xff6a20, c2: 0xffd050, c3: 0xff2a10, range: 4.8, dmg: 62, waves: 1 },
     bars: { atk: 3, spd: 3, hp: 3, tec: 4 },
@@ -535,7 +542,7 @@ const CHARACTERS = [
     colors: { kimono: 0xe8b23a, hakama: 0x1a1a1a, haori: 0xf0c040, scarf: 0xffffff, hair: 0xf2c84a, obi: 0x222222, glow: 0xfff070, eye: 0xc08020, pattern: 0xfff4d0 },
     look: { pattern: 'uroko', bangs: [0.3, 0.22, 0.34, 0.22, 0.3], browTilt: 0.5, longSide: true },
     stats: { hp: 100, speed: 7.4, dmg: 0.92, gauge: 1.1, dashCooldown: 0.4 },
-    moves: { l3: '번개의 호흡 · 육연', rush: '번개의 호흡 제1형 · 벽력일섬', heavy: '번개의 호흡 · 팔연', special: '벽력일섬 · 신속 (神速)' },
+    moves: { l3: '번개의 호흡 · 육연', rush: '번개의 호흡 제1형 · 벽력일섬', heavy: '번개의 호흡 · 팔연', flurry: '벽력일섬 · 연속', sweep: '번개의 호흡 제7형 · 화뢰신', wave: '번개의 호흡 · 원뢰', special: '벽력일섬 · 신속 (神速)' },
     attackTheme: 'lightning',
     special: { name: '벽력일섬 · 신속', theme: 'lightning', c1: 0xfff27a, c2: 0xffffff, c3: 0x9ad8ff, range: 4.2, dmg: 50, waves: 1, waveSpeed: 26 },
     bars: { atk: 2, spd: 5, hp: 2, tec: 3 },
@@ -546,7 +553,7 @@ const CHARACTERS = [
     colors: { kimono: 0x3a4a5a, hakama: 0x2a2a3a, haori: 0x3a4a5a, scarf: 0x8a7a5a, hair: 0x1a1a2a, obi: 0x6a5a3a, glow: 0xff9040, eye: 0x30c0a0, pattern: 0x8a7a5a },
     look: { boarMask: true, bladeScale: 1.35, twinBlades: true, bangs: [0.3, 0.3, 0.3, 0.3, 0.3] },
     stats: { hp: 150, speed: 5.8, dmg: 1.3, gauge: 0.9, dashCooldown: 0.8 },
-    moves: { l3: '짐승의 호흡 삼의 엄니 · 물어뜯기', rush: '짐승의 호흡 일의 엄니 · 꿰뚫기', heavy: '짐승의 호흡 오의 엄니 · 미친 베기', special: '짐승의 호흡 칠의 형 · 공간 식각' },
+    moves: { l3: '짐승의 호흡 삼의 엄니 · 물어뜯기', rush: '짐승의 호흡 일의 엄니 · 꿰뚫기', heavy: '짐승의 호흡 오의 엄니 · 미친 베기', flurry: '짐승의 호흡 이의 엄니 · 가르기', sweep: '짐승의 호흡 사의 엄니 · 잘게 찢기', wave: '짐승의 호흡 육의 엄니 · 난잡 물어뜯기', special: '짐승의 호흡 칠의 형 · 공간 식각' },
     attackTheme: 'quake',
     special: { name: '짐승의 호흡 칠의 형 · 공간 식각', theme: 'quake', c1: 0xffb060, c2: 0x8a6a40, c3: 0xff5030, range: 5.2, dmg: 70, waves: 1, waveSpeed: 12 },
     bars: { atk: 5, spd: 2, hp: 5, tec: 2 },
@@ -706,12 +713,12 @@ const CHAPTERS = [
       '물의 주 토미오카 기유의 권유로 우로코다키 아래에서 2년을 수련했다. 사비토와 마코모의 영혼이 길을 가르쳐 주었다.',
       '최종 선별. 등나무 꽃이 지키는 산에서 7일 밤을 살아남아야 귀살대에 들어갈 수 있다.',
     ],
-    theme: 'wisteria', scale: { hp: 1.0, dmg: 1.0 },
+    theme: 'wisteria', scale: { hp: 1.15, dmg: 1.1 },
     waves: [
       { melee: 2, ranged: 0, title: '첫 번째 밤', sub: '도깨비들이 등나무 꽃 밖에서 기어 나온다' },
       { melee: 3, ranged: 1, title: '둘째 밤', sub: '산속 깊은 곳에서 울음소리' },
       { melee: 3, ranged: 2, title: '셋째 밤', sub: '손이 잔뜩 달린 무언가가 다가온다' },
-      { boss: { id: 'tede', name: '손 도깨비 — 우로코다키의 제자들을 먹은 자', body: 0x6a8a4a, loin: 0x3a2a2a, eye: 0xffe040, hp: 420, scale: 2.6, dmg: 14, skills: ['slam', 'charge', 'summon'] }, title: '손 도깨비', sub: '47년 동안 산에 갇혀 있던 도깨비' },
+      { boss: { id: 'tede', name: '손 도깨비 — 우로코다키의 제자들을 먹은 자', body: 0x6a8a4a, loin: 0x3a2a2a, eye: 0xffe040, hp: 546, scale: 2.6, dmg: 14, skills: ['slam', 'charge', 'summon'] }, title: '손 도깨비', sub: '47년 동안 산에 갇혀 있던 도깨비' },
     ],
     clear: ['손 도깨비를 베었다. 우로코다키의 제자들의 원한이 풀렸다.', '최종 선별 합격. 귀살대의 대원이 되었다. 검은 일륜도가 손에 들어왔다.', '까마귀가 첫 임무를 전한다. — 아사쿠사로.'],
   },
@@ -722,11 +729,11 @@ const CHAPTERS = [
       '무잔은 사람들 사이로 사라졌다. 그의 배신자, 도깨비 의사 타마요와 유시로를 만났다.',
       '"십이귀월의 피를 모으면 네즈코를 인간으로 되돌릴 수 있다." 목표가 생겼다. 그리고 늪 속에서 세 도깨비가 나타났다.',
     ],
-    theme: 'town', scale: { hp: 1.2, dmg: 1.15 },
+    theme: 'town', scale: { hp: 1.4, dmg: 1.3 },
     waves: [
       { melee: 3, ranged: 1, title: '거리의 도깨비', sub: '골목마다 눈이 빛난다' },
       { melee: 3, ranged: 3, title: '무잔의 부하들', sub: '피를 받은 자들' },
-      { boss: { id: 'swamp', name: '늪 도깨비 — 열여섯 살 소녀를 노리는 자', body: 0x2a3a4a, loin: 0x1a2a1a, eye: 0xff60a0, hp: 560, scale: 2.0, dmg: 16, skills: ['blink', 'field', 'charge'] }, title: '늪 도깨비', sub: '늪 속에서 셋이 동시에 솟아오른다' },
+      { boss: { id: 'swamp', name: '늪 도깨비 — 열여섯 살 소녀를 노리는 자', body: 0x2a3a4a, loin: 0x1a2a1a, eye: 0xff60a0, hp: 728, scale: 2.0, dmg: 16, skills: ['blink', 'field', 'charge'] }, title: '늪 도깨비', sub: '늪 속에서 셋이 동시에 솟아오른다' },
     ],
     clear: ['늪 도깨비를 베었다. 소녀는 무사하다.', '타마요의 말대로, 십이귀월의 피가 필요하다. 다음 임무지는 나타구모 산.', '그곳에서 노란 머리의 겁쟁이와 멧돼지 가면을 쓴 검사가 기다리고 있다.'],
   },
@@ -737,12 +744,12 @@ const CHAPTERS = [
       '산 전체가 거미줄로 덮여 있다. 거미 가족 도깨비들이 "가족"을 흉내 내며 대원들을 조종한다.',
       '산 정상에서 하현 오 루이가 기다린다. 물의 호흡으로는 실을 벨 수 없다 — 아버지가 가르쳐 준 춤을 떠올려라.',
     ],
-    theme: 'spider', scale: { hp: 1.4, dmg: 1.3 },
+    theme: 'spider', scale: { hp: 1.7, dmg: 1.45 },
     joinAllyStart: ['tanjiro', 'zenitsu', 'inosuke'],
     waves: [
       { melee: 3, ranged: 2, title: '거미 가족', sub: '조종당한 대원들이 실에 매달려 온다' },
       { melee: 4, ranged: 3, title: '어머니와 형', sub: '실을 끊어라' },
-      { boss: { id: 'rui', name: `루이 — ${L(5)}`, body: 0xf0f0f4, loin: 0x3a2a4a, eye: 0xff3030, hp: 780, scale: 2.0, dmg: 18, skills: ['fan', 'field', 'blink'] }, title: '하현 오 · 루이', sub: '"가족의 인연"을 강요하는 소년' },
+      { boss: { id: 'rui', name: `루이 — ${L(5)}`, body: 0xf0f0f4, loin: 0x3a2a4a, eye: 0xff3030, hp: 1014, scale: 2.0, dmg: 18, skills: ['fan', 'field', 'blink'] }, title: '하현 오 · 루이', sub: '"가족의 인연"을 강요하는 소년' },
     ],
     clear: ['루이의 실은 히노카미 카구라 앞에서 끊어졌다. 물의 주 기유와 벌레의 주 시노부가 도착했다.', '도깨비를 데리고 다닌 죄로 주합회의에 회부되었으나, 우부야시키가 허락했다.', '나비저택에서 재활 훈련. 전집중 상중을 익혔다. 카나오와 만났다.'],
     joinAlly: 'giyu',
@@ -754,12 +761,12 @@ const CHAPTERS = [
       '하현 일 엔무가 열차와 융합했다. 잠들면 꿈에 갇힌다 — 꿈에서 깨려면 스스로 목을 베어라.',
       '엔무를 쓰러뜨린 새벽 직전, 상현 삼 아카자가 나타난다. 렌고쿠가 앞을 막아선다.',
     ],
-    theme: 'train', scale: { hp: 1.6, dmg: 1.4 },
+    theme: 'train', scale: { hp: 2.0, dmg: 1.6 },
     joinAllyStart: ['rengoku'],
     waves: [
       { melee: 4, ranged: 2, title: '꿈에 갇힌 승객들', sub: '열차가 살아 움직인다' },
-      { boss: { id: 'enmu', name: `엔무 — ${L(1)}`, body: 0x8a6a9a, loin: 0x2a1a3a, eye: 0x60c0ff, hp: 900, scale: 2.2, dmg: 18, skills: ['field', 'summon', 'fan'] }, title: '하현 일 · 엔무', sub: '열차 전체가 그의 몸이다' },
-      { boss: { id: 'akaza1', name: `아카자 — ${U(3)}`, body: 0xffd0b0, loin: 0x2a4a8a, eye: 0xffd040, hp: 1400, scale: 2.4, dmg: 22, skills: ['blink', 'beam', 'charge'] }, title: '상현 삼 · 아카자', sub: '"강한 자여, 도깨비가 되어라"' },
+      { boss: { id: 'enmu', name: `엔무 — ${L(1)}`, body: 0x8a6a9a, loin: 0x2a1a3a, eye: 0x60c0ff, hp: 1170, scale: 2.2, dmg: 18, skills: ['field', 'summon', 'fan'] }, title: '하현 일 · 엔무', sub: '열차 전체가 그의 몸이다' },
+      { boss: { id: 'akaza1', name: `아카자 — ${U(3)}`, body: 0xffd0b0, loin: 0x2a4a8a, eye: 0xffd040, hp: 1820, scale: 2.4, dmg: 22, skills: ['blink', 'beam', 'charge'] }, title: '상현 삼 · 아카자', sub: '"강한 자여, 도깨비가 되어라"' },
     ],
     clear: ['새벽이 왔다. 아카자는 햇빛을 피해 달아났고, 렌고쿠는 그 자리에서 숨을 거두었다.', '"마음을 불태워라." 렌고쿠의 마지막 말이 가슴에 남았다.', '수개월 뒤, 소리의 주 우즈이 텐겐이 유곽 임무에 세 사람을 데려간다.'],
     leaveAlly: 'rengoku',
@@ -771,12 +778,12 @@ const CHAPTERS = [
       '상현 육 다키가 오비(띠)로 사람을 가두고, 오빠 규타로가 피의 낫을 휘두른다. 둘은 한 몸 — 동시에 목을 베어야 한다.',
       '100년 동안 아무도 상현을 베지 못했다.',
     ],
-    theme: 'district', scale: { hp: 1.8, dmg: 1.5 },
+    theme: 'district', scale: { hp: 2.3, dmg: 1.75 },
     joinAllyStart: ['tengen'],
     waves: [
       { melee: 4, ranged: 3, title: '유곽의 밤', sub: '띠 속에 갇힌 사람들' },
-      { boss: { id: 'daki', name: `다키 — ${U(6)}`, body: 0xf8e0e8, loin: 0xd04080, eye: 0xff5090, hp: 900, scale: 2.0, dmg: 18, skills: ['fan', 'thread', 'blink'] }, title: '상현 육 · 다키', sub: '오비가 유곽 전체를 휘감는다' },
-      { boss: { id: 'gyutaro', name: `규타로 — ${U(6)}`, body: 0x5a7a5a, loin: 0x2a1a1a, eye: 0xa0ff40, hp: 1300, scale: 2.3, dmg: 22, skills: ['fan', 'field', 'charge', 'summon'] }, title: '상현 육 · 규타로', sub: '피의 낫이 독을 뿌린다' },
+      { boss: { id: 'daki', name: `다키 — ${U(6)}`, body: 0xf8e0e8, loin: 0xd04080, eye: 0xff5090, hp: 1170, scale: 2.0, dmg: 18, skills: ['fan', 'thread', 'blink'] }, title: '상현 육 · 다키', sub: '오비가 유곽 전체를 휘감는다' },
+      { boss: { id: 'gyutaro', name: `규타로 — ${U(6)}`, body: 0x5a7a5a, loin: 0x2a1a1a, eye: 0xa0ff40, hp: 1690, scale: 2.3, dmg: 22, skills: ['fan', 'field', 'charge', 'summon'] }, title: '상현 육 · 규타로', sub: '피의 낫이 독을 뿌린다' },
     ],
     clear: ['다키와 규타로의 목이 동시에 떨어졌다. 100년 만에 상현이 쓰러졌다.', '텐겐은 왼팔과 왼눈을 잃고 은퇴했다. "너희가 다음 세대다."', '일륜도가 부러졌다. 새 검을 받으러 도공 마을로 향한다.'],
     leaveAlly: 'tengen',
@@ -788,12 +795,12 @@ const CHAPTERS = [
       '상현 사 한텐구가 마을을 습격했다. 분노·기쁨·슬픔·즐거움 네 몸으로 나뉘어 싸운다.',
       '상현 오 교쿠코는 도공들을 물고기 항아리에 가둔다. 네즈코가 햇빛을 이겨내는 밤.',
     ],
-    theme: 'village', scale: { hp: 2.0, dmg: 1.6 },
+    theme: 'village', scale: { hp: 2.6, dmg: 1.9 },
     joinAllyStart: ['mitsuri'],
     waves: [
       { melee: 4, ranged: 4, title: '마을의 습격', sub: '항아리에서 물고기 도깨비가 쏟아진다' },
-      { boss: { id: 'gyokko', name: `교쿠코 — ${U(5)}`, body: 0x8ab0d0, loin: 0x2a3a6a, eye: 0xff8040, hp: 1200, scale: 2.2, dmg: 22, skills: ['fan', 'summon', 'field'] }, title: '상현 오 · 교쿠코', sub: '항아리 속에서 예술을 논한다' },
-      { boss: { id: 'hantengu', name: `한텐구 — ${U(4)}`, body: 0x3a2a4a, loin: 0x6a2a2a, eye: 0xffd040, hp: 1500, scale: 2.4, dmg: 24, skills: ['summon', 'beam', 'blink', 'fan'] }, title: '상현 사 · 한텐구', sub: '베어도 베어도 분열한다 — 본체를 찾아라' },
+      { boss: { id: 'gyokko', name: `교쿠코 — ${U(5)}`, body: 0x8ab0d0, loin: 0x2a3a6a, eye: 0xff8040, hp: 1560, scale: 2.2, dmg: 22, skills: ['fan', 'summon', 'field'] }, title: '상현 오 · 교쿠코', sub: '항아리 속에서 예술을 논한다' },
+      { boss: { id: 'hantengu', name: `한텐구 — ${U(4)}`, body: 0x3a2a4a, loin: 0x6a2a2a, eye: 0xffd040, hp: 1950, scale: 2.4, dmg: 24, skills: ['summon', 'beam', 'blink', 'fan'] }, title: '상현 사 · 한텐구', sub: '베어도 베어도 분열한다 — 본체를 찾아라' },
     ],
     clear: ['한텐구의 본체를 벴다. 해가 떴지만 네즈코는 타지 않았다 — 햇빛을 이겨낸 도깨비.', '무잔이 네즈코를 노리기 시작했다. 흔적(痣)이 나타난 대원들이 늘어난다.', '주 합동 훈련 뒤, 무잔이 우부야시키 저택을 급습한다. 우부야시키는 자폭으로 무잔을 유인했고, 전원이 무한성으로 끌려갔다.'],
     leaveAlly: 'mitsuri',
@@ -805,13 +812,13 @@ const CHAPTERS = [
       '시노부는 도우마에게 목숨을 걸고 독을 심었다. 카나오와 이노스케가 그 뒤를 잇는다.',
       '아카자, 그리고 요리이치의 형 코쿠시보. 이 성을 넘어야 무잔에게 닿는다.',
     ],
-    theme: 'labyrinth', scale: { hp: 2.3, dmg: 1.75 },
+    theme: 'labyrinth', scale: { hp: 3.0, dmg: 2.1 },
     joinAllyStart: ['giyu'],
     waves: [
       { melee: 5, ranged: 4, title: '뒤집힌 복도', sub: '무한히 이어지는 성' },
-      { boss: { id: 'doma', name: `도우마 — ${U(2)}`, body: 0xf8f0ff, loin: 0xd0a040, eye: 0xffa0c0, hp: 1500, scale: 2.3, dmg: 24, skills: ['field', 'fan', 'blink', 'firering'] }, title: '상현 이 · 도우마', sub: '얼음 연꽃이 피어난다 — 시노부의 독이 퍼지고 있다' },
-      { boss: { id: 'akaza2', name: `아카자 — ${U(3)}`, body: 0xffd0b0, loin: 0x2a4a8a, eye: 0xffd040, hp: 1800, scale: 2.4, dmg: 26, skills: ['blink', 'beam', 'charge', 'firering'] }, title: '상현 삼 · 아카자', sub: '투명한 세계 — 투기를 버려라' },
-      { boss: { id: 'kokushibo', name: `코쿠시보 — ${U(1)}`, body: 0x3a2a3a, loin: 0x6a2a2a, eye: 0xff4040, hp: 2400, scale: 2.6, dmg: 28, skills: ['beam', 'fan', 'blink', 'summon'] }, title: '상현 일 · 코쿠시보', sub: '달의 호흡 — 여섯 개의 눈' },
+      { boss: { id: 'doma', name: `도우마 — ${U(2)}`, body: 0xf8f0ff, loin: 0xd0a040, eye: 0xffa0c0, hp: 1950, scale: 2.3, dmg: 24, skills: ['field', 'fan', 'blink', 'firering'] }, title: '상현 이 · 도우마', sub: '얼음 연꽃이 피어난다 — 시노부의 독이 퍼지고 있다' },
+      { boss: { id: 'akaza2', name: `아카자 — ${U(3)}`, body: 0xffd0b0, loin: 0x2a4a8a, eye: 0xffd040, hp: 2340, scale: 2.4, dmg: 26, skills: ['blink', 'beam', 'charge', 'firering'] }, title: '상현 삼 · 아카자', sub: '투명한 세계 — 투기를 버려라' },
+      { boss: { id: 'kokushibo', name: `코쿠시보 — ${U(1)}`, body: 0x3a2a3a, loin: 0x6a2a2a, eye: 0xff4040, hp: 3120, scale: 2.6, dmg: 28, skills: ['beam', 'fan', 'blink', 'summon'] }, title: '상현 일 · 코쿠시보', sub: '달의 호흡 — 여섯 개의 눈' },
     ],
     clear: ['도우마, 아카자, 코쿠시보가 쓰러졌다. 무이치로와 겐야, 시노부가 목숨을 바쳤다.', '무한성이 무너진다. 무잔이 지상으로 끌려나왔다.', '해가 뜰 때까지 버텨야 한다. 이것이 마지막 밤이다.'],
     leaveAlly: 'giyu',
@@ -823,12 +830,12 @@ const CHAPTERS = [
       '미츠리와 오바나이, 교메이가 쓰러진다. 무잔은 절대 죽지 않는다 — 다만 햇빛만이 그를 태운다.',
       '살아남아라. 붉은 칼날로 그의 재생을 늦추고, 새벽이 올 때까지.',
     ],
-    theme: 'ruins', scale: { hp: 2.6, dmg: 1.9 },
+    theme: 'ruins', scale: { hp: 3.4, dmg: 2.3 },
     joinAllyStart: ['giyu', 'sanemi'],
     nightLength: 210, dawnClear: true,
     waves: [
       { melee: 4, ranged: 3, title: '무잔의 부하들', sub: '새벽까지 4분' },
-      { boss: { id: 'muzan', name: '키부츠지 무잔 — 도깨비의 시조', body: 0xf0e0f0, loin: 0x1a0a2a, eye: 0xff2040, hp: 6000, scale: 2.8, dmg: 30, skills: ['thread', 'beam', 'blink', 'summon', 'firering', 'charge'], undying: true }, title: '키부츠지 무잔', sub: '베어도 재생한다 — 햇빛이 뜰 때까지 버텨라' },
+      { boss: { id: 'muzan', name: '키부츠지 무잔 — 도깨비의 시조', body: 0xf0e0f0, loin: 0x1a0a2a, eye: 0xff2040, hp: 7800, scale: 2.8, dmg: 30, skills: ['thread', 'beam', 'blink', 'summon', 'firering', 'charge'], undying: true }, title: '키부츠지 무잔', sub: '베어도 재생한다 — 햇빛이 뜰 때까지 버텨라' },
     ],
     clear: ['해가 떴다. 무잔은 햇빛 속에서 재가 되었다.', '탄지로는 무잔의 저주로 도깨비가 되었지만, 네즈코와 카나오, 동료들이 그를 되돌렸다.', '도깨비의 시대가 끝났다. — 그리고 현대. 그들의 자손들이 평범한 아침을 맞는다. — 끝 —'],
     final: true,
@@ -2192,6 +2199,24 @@ const ATTACKS = {
     fx: { sweep: -1, tilt: 0.1, roll: 0.3, color: 0xffffff, y: 1.0, rOut: 2.2 }, stagger: 0.5, hitstop: 0.05, shake: 0.25,
     next: null, rush: true, cooldown: 3.5,
   },
+  flurry: {
+    dur: 0.95, active: [0.1, 0.8], dmg: 7, range: 2.4, arc: 2.0, knock: 1.5, gauge: 4, lunge: 1.2, multi: 4,
+    windup: { x: -1.2, y: -1.2, z: 0 }, end: { x: -1.2, y: 1.2, z: 0 },
+    fx: { sweep: 1, tilt: 0.1, roll: 0, color: 0xffffff, y: 1.1, rOut: 2.3 }, stagger: 0.15, hitstop: 0.02, shake: 0.08,
+    next: null, cooldown: 4.5,
+  },
+  sweep: {
+    dur: 0.8, active: [0.32, 0.52], dmg: 26, range: 3.0, arc: 4.7, knock: 9, gauge: 12, lunge: 0,
+    windup: { x: -1.1, y: -1.8, z: 0.2 }, end: { x: -1.1, y: 1.8, z: -0.2 },
+    fx: { sweep: 1, tilt: 0.05, roll: 0, color: 0xffffff, y: 1.1, rOut: 3.0 }, stagger: 0.8, hitstop: 0.08, shake: 0.4,
+    next: null, cooldown: 6,
+  },
+  wavecast: {
+    dur: 0.7, active: [0.9, 0.95], dmg: 0, range: 0, arc: 0, knock: 0, gauge: 0, lunge: 0, castWave: true,
+    windup: { x: -2.4, y: 0.4, z: 0 }, end: { x: -0.8, y: -0.3, z: 0 },
+    fx: { sweep: 0, tilt: -1.2, roll: 0, color: 0xffffff, y: 1.2, rOut: 2.2 }, stagger: 0, hitstop: 0, shake: 0.2,
+    next: null, cooldown: 5,
+  },
   special: {
     dur: 1.35, active: [0.28, 0.62], dmg: 55, range: 4.6, arc: Math.PI * 2 + 1, knock: 13, gauge: 0, lunge: 0,
     windup: { x: -1.4, y: -1.2, z: 0 }, end: { x: -1.4, y: -1.2, z: 0 },
@@ -2519,7 +2544,7 @@ class Player {
     this.lookIdle = 10;     // 마지막 수동 시점 조작 후 경과 시간
     this.aim = null;        // 조준 중: { act, t, yaw }
     this.aimMesh = null;
-    this.rushCd = 0;
+    this.cds = { rush: 0, flurry: 0, sweep: 0, wavecast: 0 };
     this.camTarget = null;  // 소프트 록온 대상
     this._camPos = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
@@ -2608,10 +2633,11 @@ class Player {
     input.dash = false;
 
     // ---- 공격 입력: 짧게 누르면 즉시, 길게 누르면 조준(부채꼴 표시) 후 떼면 발동 ----
-    this.rushCd = Math.max(0, this.rushCd - dt);
+    for (const k in this.cds) this.cds[k] = Math.max(0, this.cds[k] - dt);
     const HOLD = 0.2;
-    const acts = ['light', 'heavy', 'tech1', 'tech2'];
-    const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' };
+    const acts = ['light', 'heavy', 'tech1', 'tech2', 'tech4', 'tech5', 'tech6'];
+    const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush', tech4: 'flurry', tech5: 'sweep', tech6: 'wavecast' };
+    const onCd = (name) => this.cds[name] !== undefined && this.cds[name] > 0;
     const hold = input.hold || {}, release = input.release || {};
     if (!this.aim) {
       for (const a of acts) if (hold[a] && (hold[a] += dt) >= HOLD && !(this.attack && this.attack.def.special)) {
@@ -2628,7 +2654,7 @@ class Player {
       if (release[a.act] || !hold[a.act]) {
         this._hideAim();
         const name = actToAttack[a.act] || 'light1';
-        if (!(name === 'rush' && this.rushCd > 0)) { this.yaw = a.yaw; this._startAttack(name, ctx, { aimed: true }); }
+        if (!onCd(name)) { this.yaw = a.yaw; this._startAttack(name, ctx, { aimed: true }); }
         this.aim = null;
       }
     } else {
@@ -2636,7 +2662,7 @@ class Player {
       for (const a of acts) {
         if (!release[a]) continue;
         const name = actToAttack[a];
-        if (name === 'rush' && this.rushCd > 0) continue;
+        if (onCd(name)) continue;
         if (!this.attack) this._startAttack(name, ctx);
         else if (!this.attack.def.special && this.attack.t >= this.attack.def.active[0]) {
           if (a === 'light' && this.attack.def.next) this.queued = this.attack.def.next;
@@ -2719,7 +2745,7 @@ class Player {
     if (!def) return;
     this.attack = { name, def, t: 0, hitSet: new Set(), fxDone: false, waveDone: false, waveCount: 0, aimed: !!opt.aimed };
     this.queued = null;
-    if (def.rush) this.rushCd = def.cooldown;
+    if (def.cooldown) this.cds[name] = def.cooldown;
     if (name.startsWith('light')) { this.nextLight = def.next || 'light1'; this.comboResetTimer = 0.55; }
     else this.nextLight = 'light1';
     if (!opt.aimed && (!this.moving || def.special)) this.yaw = this.camYaw + Math.PI;
@@ -2744,6 +2770,9 @@ class Player {
     if (name === 'light3' && mv.l3) this.events.push({ type: 'move', name: mv.l3, tier: 1 });
     if (name === 'heavy' && mv.heavy) this.events.push({ type: 'move', name: mv.heavy, tier: 2 });
     if (name === 'rush') { this.events.push({ type: 'move', name: mv.rush || '돌진 베기', tier: 2 }); this.invuln = Math.max(this.invuln, 0.35); }
+    if (name === 'flurry') this.events.push({ type: 'move', name: mv.flurry || '연참', tier: 2 });
+    if (name === 'sweep') this.events.push({ type: 'move', name: mv.sweep || '회전 베기', tier: 2 });
+    if (name === 'wavecast') this.events.push({ type: 'move', name: mv.wave || '검기 발사', tier: 2 });
     if (def.special) {
       const sp = this.ch.special;
       this.events.push({ type: 'move', name: mv.special || sp.name, tier: 3 });
@@ -2771,6 +2800,17 @@ class Player {
       // 호흡 연출: 검격마다 테마 파티클
       this._themeBurst(ctx, d.special ? 3 : d.heavy || a.name === 'light3' ? 2 : 1, fx.sweep, rOut);
     }
+    if (d.multi) {
+      // 연참: 활성 구간을 나눠 여러 번 판정 + 궤적
+      const seg = (ae - as) / d.multi;
+      const idx = Math.floor((a.t - as) / seg);
+      if (a.t >= as && a.t <= ae && idx !== a.multiIdx) {
+        a.multiIdx = idx; a.hitSet = new Set();
+        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut: d.range, angle: 1.8, tilt: (idx % 2 ? -0.5 : 0.5), roll: 0, color: sp.c1, life: 0.16, sweep: idx % 2 ? -1 : 1, y: 1.0 + (idx % 2) * 0.25 });
+        this.events.push({ type: 'swing', heavy: false });
+      }
+    }
+    if (d.castWave && !a.waveDone && a.t >= 0.3) { a.waveDone = true; this._launchWave(ctx, 0, 0.7); this.events.push({ type: 'wave' }); }
     if (a.t >= as && a.t <= ae) {
       this._hitCheck(a, ctx, range, heavyPlus);
       if (d.special) this._specialParticles(ctx, a.t);
@@ -2795,11 +2835,11 @@ class Player {
 
   // 조준 부채꼴 표시
   _showAim(ctx, a) {
-    const name = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' }[a.act] || 'light1';
+    const name = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush', tech4: 'flurry', tech5: 'sweep', tech6: 'wavecast' }[a.act] || 'light1';
     const def = ATTACKS[name];
     const sp = this.ch.special;
-    const range = def.rush ? 6.5 : def.range * (def.heavy && this.skill.heavyPlus ? 1.4 : 1) + 0.3;
-    const angle = def.rush ? 0.5 : Math.min(def.arc, Math.PI * 1.1);
+    const range = def.rush ? 6.5 : def.castWave ? 14 : def.range * (def.heavy && this.skill.heavyPlus ? 1.4 : 1) + 0.3;
+    const angle = def.rush ? 0.5 : def.castWave ? 0.4 : Math.min(def.arc, Math.PI * 1.15);
     if (!this.aimMesh || this.aimMesh.userData.key !== name) {
       this._hideAim();
       const geo = ctx.effects._arcGeo(0.3, range, angle);
@@ -2883,7 +2923,7 @@ class Player {
     if (theme === 'lightning' && Math.random() < 0.2) ctx.effects.burst(c, { count: 6, colors: [0xffffff], speed: 1, life: 0.1, size: 1.6, gravity: 0, drag: 0 });
   }
 
-  _launchWave(ctx, spread = 0) {
+  _launchWave(ctx, spread = 0, power = 1) {
     const sp = this.ch.special;
     const geo = ctx.effects._arcGeo(0.9, 1.9, 2.3);
     const m = new THREE.MeshBasicMaterial({ color: sp.c1, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true });
@@ -2894,7 +2934,8 @@ class Player {
     mesh.position.set(this.pos.x, 1.2, this.pos.z);
     this.scene.add(mesh);
     const dir = new THREE.Vector3(Math.sin(this.yaw + spread), 0, Math.cos(this.yaw + spread));
-    this.waves.push({ mesh, mat: m, dir, life: 1.4, maxLife: 1.4, hitSet: new Set(), speed: sp.waveSpeed || 15 });
+    if (power !== 1) mesh.scale.setScalar(power);
+    this.waves.push({ mesh, mat: m, dir, life: 1.4, maxLife: 1.4, hitSet: new Set(), speed: sp.waveSpeed || 15, power });
   }
 
   _updateWaves(dt, ctx) {
@@ -2919,7 +2960,7 @@ class Player {
         if (Math.abs(along) < 1.2 + e.radius && lateral < 1.9 * s + e.radius) {
           w.hitSet.add(e);
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
-          this._applyHit(e, { dmg: 45 * this.skill.dmgMul * this.skill.specialMul, knock: 10, stagger: 0.8, gauge: 0, hitstop: 0.06, shake: 0.3, special: true }, dir, ctx);
+          this._applyHit(e, { dmg: 45 * (w.power || 1) * this.skill.dmgMul * (w.power === 1 ? this.skill.specialMul : 1), knock: 10, stagger: 0.8, gauge: w.power === 1 ? 0 : 6, hitstop: 0.06, shake: 0.3, special: w.power === 1 }, dir, ctx);
         }
       }
       for (const p of ctx.projectiles) {
@@ -3318,7 +3359,7 @@ return { Ally };
 })();
 
 // ===== enemy.js =====
-const { Projectile, Enemy, MeleeYokai, RangedYokai, BossOni, EnemyManager } = (() => {
+const { Projectile, Enemy, MeleeYokai, BruteYokai, RangedYokai, BossOni, EnemyManager } = (() => {
 // enemy.js — 요괴: 근접형(小鬼), 원거리형(鬼火), 보스(黒鬼), 투사체, 웨이브/새벽 소멸 관리
 
 
@@ -3420,6 +3461,7 @@ class Enemy {
     if (!this.targetable) return false;
     this.hp -= dmg;
     this.hitFlash = 1;
+    this.sinceHit = 0;
     const kMul = this.isBoss ? 0.12 : 1;
     this.knock.addScaledVector(dir, knock * kMul);
     // 보스는 경직에 강한 저항
@@ -3432,7 +3474,7 @@ class Enemy {
   die(effects) {
     if (this.cfg && this.cfg.undying && !this.dissolving) {
       // 무잔: 죽지 않고 재생. 새벽(햇빛)만이 소멸시킨다
-      this.hp = Math.round(this.maxHp * 0.2); this.regenT = 3.0; this.stagger = 1.2;
+      this.hp = this.maxHp; this.regenT = 0; this.stagger = 1.5;
       effects.burst(this.center, { count: 60, colors: [0xff2040, 0xffffff, 0x8a1030], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
       effects.shockwave(this.pos, { color: 0xff2040, radius: 8, life: 0.8 });
       this.onRegen && this.onRegen(this);
@@ -3488,6 +3530,13 @@ class Enemy {
   update(dt, ctx) {
     this.stateT += dt;
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
+    // 도깨비의 재생: 잠시 안 맞으면 체력이 차오른다 (원작처럼 빨리 베어야 함)
+    this.sinceHit = (this.sinceHit || 0) + dt;
+    if (this.alive && this.state !== 'spawn' && this.sinceHit > 2.5 && this.hp < this.maxHp) {
+      const rate = this.isBoss ? (this.muzan ? 0.03 : this.upper ? 0.02 : 0.012) : 0.02;
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * rate * dt);
+      if (Math.random() < 0.08) ctx.effects.emit({ pos: this.center, vel: new THREE.Vector3(rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5)), life: 0.5, size: 0.3, color: 0xff3050, drag: 1 });
+    }
     this.stagger = Math.max(0, this.stagger - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
@@ -3633,6 +3682,9 @@ class MeleeYokai extends Enemy {
     if (this.state === 'chase') {
       this._faceTo(ang, dt);
       if (!p.alive) return;
+      // 혈귀술: 도약 베기(중거리) / 회전 베기(근접, 확률)
+      if (!this.isBoss && this.attackCooldown <= 0 && d > 3.2 && d < 7.5 && Math.random() < 0.6) { this.setState('lunge'); this.hit = false; this.lungeDir = new THREE.Vector3(dx / d, 0, dz / d); return; }
+      if (!this.isBoss && this.attackCooldown <= 0 && d <= this.attackRange + 0.5 && Math.random() < 0.3) { this.setState('spin'); this.hit = false; return; }
       if (d > this.attackRange) this._moveTowards(dx, dz, d, dt);
       else if (this.attackCooldown <= 0) { this.setState('attack'); this.hit = false; }
       // 살짝 주위를 도는 움직임
@@ -3650,7 +3702,33 @@ class MeleeYokai extends Enemy {
         const cosA = (dx * fx + dz * fz) / Math.max(d, 1e-4);
         if (d < this.attackRange + p.radius + 0.3 && cosA > 0.3) p.takeDamage(this.dmg, this.pos, ctx.effects);
       }
-      if (t >= 1.05) { this.setState('chase'); this.attackCooldown = rand(1.4, 2.4); }
+      if (t >= 1.05) { this.setState('chase'); this.attackCooldown = rand(1.1, 1.9); }
+    } else if (this.state === 'lunge') {
+      const t = this.stateT;
+      if (t < 0.4) { this._faceTo(ang, dt, 8); if (Math.random() < 0.5) ctx.effects.emit({ pos: this.center, vel: new THREE.Vector3(0, 1.5, 0), life: 0.3, size: 0.4, color: 0xff3050 }); }
+      else if (t < 0.75) {
+        this.pos.addScaledVector(this.lungeDir, 15 * dt);
+        if (!this.hit) {
+          for (const tg of [p, ...(ctx.allies || [])]) {
+            if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < this.radius + tg.radius + 0.5) {
+              this.hit = true; tg.takeDamage(Math.round(this.dmg * 1.2), this.pos, ctx.effects);
+              ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.3, rOut: 2.0, angle: 1.4, tilt: -0.4, color: 0xff3050, life: 0.2, sweep: 1, y: 1.0, opacity: 0.6 });
+              break;
+            }
+          }
+        }
+      }
+      if (t >= 1.0) { this.setState('chase'); this.attackCooldown = rand(1.6, 2.6); }
+    } else if (this.state === 'spin') {
+      const t = this.stateT;
+      if (t >= 0.45 && !this.hit) {
+        this.hit = true;
+        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.3, rOut: 2.6, angle: Math.PI * 1.1, tilt: 0.1, color: 0xff3050, life: 0.25, sweep: 1, y: 1.0, opacity: 0.6 });
+        ctx.effects.slashArc(this.pos, this.yaw + Math.PI, { rIn: 0.3, rOut: 2.6, angle: Math.PI * 1.1, tilt: 0.1, color: 0xff3050, life: 0.25, sweep: 1, y: 1.0, opacity: 0.6 });
+        ctx.sfx && ctx.sfx('swingHeavy');
+        for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < 2.7 + tg.radius) tg.takeDamage(Math.round(this.dmg * 1.3), this.pos, ctx.effects);
+      }
+      if (t >= 0.9) { this.setState('chase'); this.attackCooldown = rand(1.8, 2.8); }
     }
   }
 
@@ -3670,12 +3748,68 @@ class MeleeYokai extends Enemy {
       lean = 0.15;
     } else if (this.state === 'hurt') {
       lean = -0.3;
+    } else if (this.state === 'lunge') {
+      ax = t < 0.4 ? -2.4 : -0.6; lean = t < 0.4 ? -0.2 : 0.35;
+    } else if (this.state === 'spin') {
+      ax = -1.2; ay = Math.sin(t * 14) * 1.2; lean = 0.15;
     }
     this.armR.rotation.x = damp(this.armR.rotation.x, ax, 25, dt);
     this.armR.rotation.y = damp(this.armR.rotation.y, ay, 25, dt);
     this.group.rotation.x = damp(this.group.rotation.x, this.state === 'dead' ? this.group.rotation.x : lean, 12, dt);
     // 공격 준비 시 눈 붉게
-    this.eyeMat.emissive.setHex(this.state === 'attack' && t < 0.65 ? 0xff2020 : 0xffe08a);
+    this.eyeMat.emissive.setHex((this.state === 'attack' && t < 0.65) || (this.state === 'lunge' && t < 0.4) || (this.state === 'spin' && t < 0.45) ? 0xff2020 : 0xffe08a);
+  }
+}
+
+// ---------- 거구 도깨비: 크고 느리지만 내려찍기·돌진 ----------
+class BruteYokai extends MeleeYokai {
+  constructor(scene, pos, mul) {
+    super(scene, pos, mul);
+    this.name = '거구 도깨비'; this.kind = 'brute';
+    this.hp = this.maxHp = Math.round(120 * this.mul.hp);
+    this.speed = 2.9; this.scaleBase = 1.7; this.radius = 0.85; this.height = 2.9;
+    this.dmg = Math.round(14 * this.mul.dmg); this.attackRange = 2.8;
+    for (const m of this.mats) if (m.m.color && m.m.color.getHex() === 0xb8322a) m.m.color.setHex(0x5a2a5a);
+  }
+  behave(dt, ctx) {
+    const p = this._target(ctx);
+    const { dx, dz, d, ang } = this._toPlayer(p);
+    if (this.state === 'chase') {
+      this._faceTo(ang, dt, 5);
+      if (!p.alive) return;
+      if (this.attackCooldown <= 0 && d > 6 && Math.random() < 0.5) { this.setState('charge'); this.hit = false; this.charge = null; return; }
+      if (d > this.attackRange) this._moveTowards(dx, dz, d, dt); else if (this.attackCooldown <= 0) { this.setState('slam'); this.hit = false; }
+    } else if (this.state === 'slam') {
+      const t = this.stateT;
+      if (t < 0.8) this._faceTo(ang, dt, 3);
+      if (t >= 0.8 && !this.hit) {
+        this.hit = true;
+        const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+        const impact = new THREE.Vector3(this.pos.x + fx * 2, 0, this.pos.z + fz * 2);
+        ctx.effects.shockwave(impact, { color: 0xff6060, radius: 3.5, life: 0.5, y: 0.1 }); ctx.effects.addShake(0.5); ctx.sfx && ctx.sfx('slam');
+        for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - impact.x, tg.pos.z - impact.z) < 3.3) tg.takeDamage(this.dmg, impact, ctx.effects);
+      }
+      if (t >= 1.4) { this.setState('chase'); this.attackCooldown = rand(1.4, 2.2); }
+    } else if (this.state === 'charge') {
+      const t = this.stateT;
+      if (t < 0.6) this._faceTo(ang, dt, 6);
+      else if (t < 1.3) {
+        if (!this.charge) this.charge = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+        this.pos.addScaledVector(this.charge, 12 * dt);
+        if (!this.hit) for (const tg of [p, ...(ctx.allies || [])]) if (tg.alive && Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) < this.radius + tg.radius + 0.5) { this.hit = true; tg.takeDamage(Math.round(this.dmg * 0.9), this.pos, ctx.effects); }
+        if (!ctx.stage.inBounds(this.pos.x, this.pos.z, this.radius + 0.3)) this.stateT = 1.3;
+      }
+      if (t >= 1.8) { this.setState('chase'); this.attackCooldown = rand(1.6, 2.4); }
+    }
+  }
+  animate(dt) {
+    const t = this.stateT; let ax = 0.2, lean = 0;
+    if (this.state === 'slam') { ax = t < 0.8 ? -2.8 : -0.4; lean = t < 0.8 ? -0.2 : 0.3; }
+    else if (this.state === 'charge') { ax = -1.0; lean = t < 0.6 ? -0.2 : 0.35; }
+    else if (this.state === 'chase') { const w = performance.now() * 0.008 + this.id; this.legs[0].rotation.x = Math.sin(w) * 0.5; this.legs[1].rotation.x = -Math.sin(w) * 0.5; ax = 0.2 + Math.sin(w) * 0.2; lean = 0.1; }
+    this.armR.rotation.x = damp(this.armR.rotation.x, ax, 18, dt);
+    if (this.state !== 'dead') this.group.rotation.x = damp(this.group.rotation.x, lean, 10, dt);
+    this.eyeMat.emissive.setHex((this.state === 'slam' && t < 0.8) || (this.state === 'charge' && t < 0.6) ? 0xff2020 : 0xffe08a);
   }
 }
 
@@ -3740,7 +3874,15 @@ class RangedYokai extends Enemy {
       else if (d > this.preferMax) this._moveTowards(dx, dz, d, dt);
       // 측면 이동
       if (d > 1e-3) { this.pos.x += (-dz / d) * this.strafe * 1.6 * dt; this.pos.z += (dx / d) * this.strafe * 1.6 * dt; }
-      if (this.fireCooldown <= 0 && d < 18) { this.setState('cast'); }
+      if (d < 3 && this.attackCooldown <= 0) {
+        // 혈귀술: 순간이동 후퇴
+        this.attackCooldown = 4;
+        ctx.effects.mist(this.center, [0x70d0ff, 0xffffff], 14);
+        const nx = this.pos.x - dx / d * 6, nz = this.pos.z - dz / d * 6;
+        this.pos.set(nx, this.pos.y, nz); ctx.stage.resolveCollisions(this.pos, this.radius);
+        ctx.effects.mist(this.center, [0x70d0ff, 0xffffff], 14); ctx.sfx && ctx.sfx('dash');
+      }
+      if (this.fireCooldown <= 0 && d < 18) { this.setState('cast'); this.castFan = Math.random() < 0.45; }
     } else if (this.state === 'cast') {
       const t = this.stateT;
       if (t < 0.6) {
@@ -3754,11 +3896,14 @@ class RangedYokai extends Enemy {
         const target = new THREE.Vector3(p.pos.x, p.pos.y + 1.0, p.pos.z);
         // 약간의 리드
         const dir = target.sub(src).normalize();
-        ctx.spawnProjectile(src, dir, { speed: 9, dmg: Math.round(7 * this.mul.dmg), color: 0x60c0ff });
+        if (this.castFan) {
+          const base = Math.atan2(dir.x, dir.z);
+          for (const off of [-0.25, 0, 0.25]) ctx.spawnProjectile(src.clone(), new THREE.Vector3(Math.sin(base + off), dir.y, Math.cos(base + off)), { speed: 10, dmg: Math.round(6 * this.mul.dmg), color: 0xa0e0ff, size: 0.24 });
+        } else ctx.spawnProjectile(src, dir, { speed: 10, dmg: Math.round(8 * this.mul.dmg), color: 0x60c0ff });
         ctx.sfx && ctx.sfx('fire');
         ctx.effects.burst(src, { count: 8, colors: [0x70d0ff, 0xffffff], speed: 2, life: 0.3, size: 0.3, gravity: 0, drag: 2 });
       }
-      if (t >= 1.0) { this.setState('chase'); this.fired = false; this.fireCooldown = rand(2.6, 4.0); }
+      if (t >= 1.0) { this.setState('chase'); this.fired = false; this.fireCooldown = rand(2.0, 3.2); }
     }
   }
 
@@ -3803,6 +3948,14 @@ class BossOni extends MeleeYokai {
     this.skills = cfg.skills || ['slam', 'charge'];
     this.cfg.chargeSpeed = cfg.chargeSpeed || 16;
     this.regenT = 0; this.lastHitT = 0;
+    // 등급: 하현 = 어려움, 상현 = 매우 어려움, 무잔 = 매우 어려움+
+    this.muzan = /무잔/.test(cfg.name);
+    this.upper = /상현/.test(cfg.name) || this.muzan;
+    this.lower = /하현/.test(cfg.name);
+    const tier = this.muzan ? { hp: 1.6, dmg: 1.6, spd: 4.0 } : this.upper ? { hp: 1.45, dmg: 1.4, spd: 3.8 } : this.lower ? { hp: 1.15, dmg: 1.15, spd: 3.3 } : { hp: 1, dmg: 1, spd: 3.0 };
+    this.hp = this.maxHp = Math.round(this.maxHp * tier.hp); this.dmg = Math.round(this.dmg * tier.dmg); this.speed = tier.spd;
+    this.tierName = this.muzan ? '무잔' : this.upper ? '상현' : this.lower ? '하현' : '도깨비';
+    this.chain = 0;
     for (const e of this.mats) {
       if (e.m.color && e.m.color.getHex() === 0xb8322a) e.m.color.setHex(cfg.body);
       if (e.m.color && e.m.color.getHex() === 0xd9a640) e.m.color.setHex(cfg.loin);
@@ -3831,12 +3984,14 @@ class BossOni extends MeleeYokai {
     const { dx, dz, d, ang } = this._toPlayer(p);
     // 불사 재생
     if (this.cfg.undying && this.regenT > 0) { this.regenT -= dt; this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.12 * dt); }
-    if (this.hp < this.maxHp * 0.5 && this.phase === 1) {
-      this.phase = 2;
-      ctx.onBossPhase && ctx.onBossPhase(this);
+    const frac = this.hp / this.maxHp;
+    if ((frac < 0.65 && this.phase === 1) || (frac < 0.3 && this.phase === 2)) {
+      this.phase++;
+      ctx.onBossPhase && ctx.onBossPhase(this, this.phase);
       ctx.sfx && ctx.sfx('roar');
       ctx.effects.shockwave(this.pos, { color: this.eyeColor, radius: 9, life: 0.9, y: 0.1 });
       ctx.effects.burst(this.center, { count: 60, colors: [this.eyeColor, 0x8a1030, 0xffffff], speed: 6, life: 1.0, size: 0.6, gravity: -2, drag: 1 });
+      this.stagger = 0; this.attackCooldown = 0.3;
     }
     const t = this.stateT;
     if (this.state === 'chase') {
@@ -3959,7 +4114,14 @@ class BossOni extends MeleeYokai {
     }
   }
 
-  _endSkill(a, b) { this.setState('chase'); this.attackCooldown = rand(a, b) * (this.phase === 2 ? 0.7 : 1); if (this.beamMesh) { this.beamMesh.userData.dead = true; this.beamMesh = null; } }
+  _endSkill(a, b) {
+    this.setState('chase');
+    const mul = (this.phase === 3 ? 0.5 : this.phase === 2 ? 0.7 : 1) * (this.muzan ? 0.65 : this.upper ? 0.75 : this.lower ? 0.9 : 1);
+    this.attackCooldown = rand(a, b) * mul;
+    // 3페이즈(또는 상현 2페이즈): 기술을 연달아 쓴다
+    if ((this.phase === 3 || (this.upper && this.phase >= 2)) && this.chain < 1 && Math.random() < 0.6) { this.chain++; this.attackCooldown = 0.15; } else this.chain = 0;
+    if (this.beamMesh) { this.beamMesh.userData.dead = true; this.beamMesh = null; }
+  }
 
   _hitTargets(ctx, test, dmg, from, onHit) {
     for (const tg of [ctx.player, ...(ctx.allies || [])]) {
@@ -4021,6 +4183,7 @@ class EnemyManager {
     this.waves = (chapter && chapter.waves) || WAVES;
     this.scale = (chapter && chapter.scale) || { hp: 1, dmg: 1 };
     this.bossCfg = (chapter && chapter.boss) || DEFAULT_BOSS;
+    this.chapterId = (chapter && chapter.id) || 1;
     this.list = [];
     this.projectiles = [];
     this.waveIndex = -1;
@@ -4061,16 +4224,20 @@ class EnemyManager {
       const pos = new THREE.Vector3(bs.x, 0, bs.z);
       const cfg = typeof w.boss === 'object' ? w.boss : this.bossCfg;
       this.boss = new BossOni(this.scene, pos, cfg, this.scale);
+      if (this._ctx) this._normalize(this.boss, this.boss.muzan ? 10 : this.boss.upper ? 15 : this.boss.lower ? 20 : 12, this._ctx);
       this.boss.onRegen = (b) => this.onBossRegen && this.onBossRegen(b);
       this.list.push(this.boss);
       this.onBossSpawn && this.onBossSpawn(this.boss);
       // 보스와 함께 잡귀 소수
       if (w.melee) for (let i = 0; i < w.melee; i++) this.spawnQueue.push({ t: 1 + i * 0.4, type: 'melee' });
+      if (this.chapterId >= 5) this.spawnQueue.push({ t: 6, type: 'ranged' }, { t: 6.5, type: 'ranged' });
       return;
     }
     let delay = 0;
     for (let i = 0; i < w.melee; i++) { this.spawnQueue.push({ t: delay, type: 'melee' }); delay += 0.35; }
     for (let i = 0; i < w.ranged; i++) { this.spawnQueue.push({ t: delay, type: 'ranged' }); delay += 0.35; }
+    const brutes = w.brute !== undefined ? w.brute : (this.chapterId >= 3 ? 1 + Math.floor((this.chapterId - 3) / 2) : 0);
+    for (let i = 0; i < brutes; i++) { this.spawnQueue.push({ t: delay, type: 'brute' }); delay += 0.5; }
   }
 
   spawnProjectile(pos, dir, opts) {
@@ -4085,9 +4252,17 @@ class EnemyManager {
     for (const p of this.projectiles) p.destroy(effects);
   }
 
+  // 플레이어의 평균 한 타 피해 (체력 정규화 기준)
+  playerHit(ctx) { const p = ctx.player; return 15 * ((p && p.skill && p.skill.dmgMul) || 1); }
+  _normalize(e, hits, ctx) {
+    e.maxHp = Math.max(10, Math.round(hits * this.playerHit(ctx)));
+    e.hp = e.maxHp; e.hitsToKill = hits;
+  }
+
   update(dt, ctx) {
     const player = ctx.player;
     this.stage = ctx.stage;
+    this._ctx = ctx;
     ctx.enemies = this.list;
     ctx.pickups = this.pickups;
     ctx.projectiles = this.projectiles;
@@ -4102,7 +4277,9 @@ class EnemyManager {
         s.t -= dt;
         if (s.t <= 0) {
           const pos = this._spawnPos(player);
-          const e = s.type === 'melee' ? new MeleeYokai(this.scene, pos, this.scale) : new RangedYokai(this.scene, pos, this.scale);
+          const ms = this.minionScale || (this.minionScale = { hp: this.scale.hp * 0.7, dmg: this.scale.dmg * 0.65 });
+          const e = s.type === 'melee' ? new MeleeYokai(this.scene, pos, ms) : s.type === 'brute' ? new BruteYokai(this.scene, pos, ms) : new RangedYokai(this.scene, pos, ms);
+          this._normalize(e, s.type === 'brute' ? 8 : s.type === 'ranged' ? 3 : 4, ctx);
           this.list.push(e);
           ctx.effects.mist(new THREE.Vector3(pos.x, 0.5, pos.z), undefined, 25);
           ctx.sfx && ctx.sfx('spawn');
@@ -4234,7 +4411,7 @@ class EnemyManager {
   }
 }
 
-return { Projectile, Enemy, MeleeYokai, RangedYokai, BossOni, EnemyManager };
+return { Projectile, Enemy, MeleeYokai, BruteYokai, RangedYokai, BossOni, EnemyManager };
 })();
 
 // ===== ui.js =====
@@ -4265,6 +4442,7 @@ class UI {
           <div id="res-row">
             <span id="potion-hud"><span class="ic">${ICONS.potion}</span><span id="potion-text">×0</span><span class="key">Q</span></span>
             <span id="gold-hud"><span class="ic">${ICONS.gold}</span><span id="gold-text">0</span></span>
+            <span id="lives-hud" title="재도전 기회">♥♥♥</span>
           </div>
           <div id="allies"></div>
           <div id="log"></div>
@@ -4280,7 +4458,7 @@ class UI {
         <div id="message"><div id="msg-title"></div><div id="msg-sub"></div></div>
         <div id="vignette"></div>
         <div id="dash-cd"></div>
-        <div id="key-hints">Tab 장비·스킬·상점 · Q 회복약 · M 소리 · Esc 일시정지</div>
+        <div id="key-hints">1~6 호흡 형 · 7/F 오의 · Tab 메뉴 · Q 회복약 · M 소리 · Esc 일시정지</div>
       </div>
       <div id="screen" class="screen">
         <div class="panel">
@@ -4325,7 +4503,7 @@ class UI {
     this.$('menu-close').addEventListener('click', () => this.onMenuClose && this.onMenuClose());
     this.$('story-cta').addEventListener('click', () => this.onStoryDone && this.onStoryDone());
     this.$('world-close').addEventListener('click', () => { this.hideWorld(); this.onWorldClose && this.onWorldClose(); });
-    this.onChapterPick = null; this.onWorldClose = null; this.onWorld = null;
+    this.onChapterPick = null; this.onWorldClose = null; this.onWorld = null; this.onDifficulty = null;
   }
 
   // ---------- 미니맵 ----------
@@ -4453,6 +4631,7 @@ class UI {
     this.el['chapter-text'].textContent = chapter ? `${chapter.title} · ${chapter.name}` : '';
     this.el['kill-text'].textContent = `토벌 ${kills}`;
   }
+  setLives(n) { const el = this.$('lives-hud'); if (el) el.textContent = '♥'.repeat(Math.max(0, n)) + '♡'.repeat(Math.max(0, 3 - n)); }
   setDash(cdFrac) { this.el['dash-cd'].style.opacity = cdFrac > 0 ? 0.8 : 0.25; this.el['dash-cd'].style.setProperty('--cd', `${(1 - cdFrac) * 100}%`); }
   message(title, sub = '', duration = 3.2) {
     this.el['msg-title'].textContent = title; this.el['msg-sub'].textContent = sub;
@@ -4484,6 +4663,7 @@ class UI {
           <button id="btn-new" class="big ${cont ? '' : 'primary'}">새로 시작<span>검사 선택</span></button>
           ${cont ? '<button id="btn-world" class="big">세계 지도<span>지역 고르기</span></button>' : ''}
         </div>
+        <div class="diff-row">난이도 ${Object.entries(stats.difficulties || {}).map(([k, v]) => `<button class="diff ${k === stats.difficulty ? 'on' : ''}" data-diff="${k}">${v.name}</button>`).join('')}</div>
         ${this.touch ? `<table class="controls compact">
           <tr><td>왼쪽 화면</td><td>드래그로 이동</td></tr>
           <tr><td>오른쪽 화면</td><td>드래그로 시점 · 탭으로 베기</td></tr>
@@ -4491,12 +4671,14 @@ class UI {
         </table><p class="tip">가로 화면을 권장합니다</p>` : `<table class="controls compact">
           <tr><td>W A S D · 마우스</td><td>이동 · 시점</td></tr>
           <tr><td>좌클릭 / 우클릭 / Shift</td><td>3연타 / 강공격 / 대시</td></tr>
-          <tr><td>F · Q · Tab · M</td><td>비검 · 회복약 · 장비/스킬/상점 · 소리</td></tr>
+          <tr><td>1~6 · 7/F</td><td>호흡 제1형~제6형 · 제7형(오의)</td></tr>
+          <tr><td>Q · Tab · M</td><td>회복약 · 장비/스킬/상점/지도 · 소리</td></tr>
         </table>`}`;
       c.textContent = '';
       const bc = this.$('btn-continue'); if (bc) bc.addEventListener('click', (e) => { e.stopPropagation(); this.onContinue && this.onContinue(); });
       this.$('btn-new').addEventListener('click', (e) => { e.stopPropagation(); this.onNew && this.onNew(); });
       const bw = this.$('btn-world'); if (bw) bw.addEventListener('click', (e) => { e.stopPropagation(); this.onWorld && this.onWorld(); });
+      for (const d of this.screen.querySelectorAll('.diff')) d.addEventListener('click', (e) => { e.stopPropagation(); this.onDifficulty && this.onDifficulty(d.dataset.diff); for (const x of this.screen.querySelectorAll('.diff')) x.classList.toggle('on', x === d); });
     } else if (kind === 'pause') {
       t.textContent = '일시정지'; s.textContent = '숨을 고른다';
       b.innerHTML = this.touch ? '' : '<p class="tip">Tab — 장비·스킬·상점 · M — 소리</p>';
@@ -4705,10 +4887,17 @@ function setupTouch(input, { onPause, onMenu, onSound } = {}) {
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>
     <div id="tech-row">
-      <button class="tb tech" data-act="tech1"><small>제1형</small><span id="tech1-label">마무리</span></button>
-      <button class="tb tech" data-act="tech2"><small>제2형</small><span id="tech2-label">돌진</span><i id="tech2-cd"></i></button>
-      <button class="tb tech" data-act="heavy"><small>제3형</small><span id="tech3-label">강공</span></button>
-      <button class="tb tech tb-special" data-act="special"><small>오의</small><span id="tech4-label">비검</span></button>
+      <div class="tech-line">
+        <button class="tb tech" data-act="tech1"><small>제1형</small><span data-l="l3">마무리</span></button>
+        <button class="tb tech" data-act="tech2"><small>제2형</small><span data-l="rush">돌진</span><i data-cd="rush"></i></button>
+        <button class="tb tech" data-act="heavy"><small>제3형</small><span data-l="heavy">강공</span></button>
+        <button class="tb tech" data-act="tech4"><small>제4형</small><span data-l="flurry">연참</span><i data-cd="flurry"></i></button>
+      </div>
+      <div class="tech-line">
+        <button class="tb tech" data-act="tech5"><small>제5형</small><span data-l="sweep">회전</span><i data-cd="sweep"></i></button>
+        <button class="tb tech" data-act="tech6"><small>제6형</small><span data-l="wave">검기</span><i data-cd="wavecast"></i></button>
+        <button class="tb tech tb-special" data-act="special"><small>제7형 · 오의</small><span data-l="special">오의</span></button>
+      </div>
     </div>
     <div id="aim-hint">길게 누르면 조준 · 조이스틱으로 방향</div>
     <div id="top-btns">
@@ -4790,7 +4979,7 @@ function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   layer.addEventListener('touchcancel', onEnd, opts);
 
   // 액션 버튼
-  const AIMABLE = new Set(['light', 'heavy', 'tech1', 'tech2']);
+  const AIMABLE = new Set(['light', 'heavy', 'tech1', 'tech2', 'tech4', 'tech5', 'tech6']);
   input.hold = input.hold || {}; input.release = input.release || {};
   for (const b of layer.querySelectorAll('.tb')) {
     const act = b.dataset.act;
@@ -4825,12 +5014,9 @@ function setupTouch(input, { onPause, onMenu, onSound } = {}) {
     setSpecialReady(ready) { layer.querySelector('.tb-special').classList.toggle('ready', !!ready); },
     setMoves(moves) {
       const short = (s, d) => (s ? s.split('·').pop().trim() : d);
-      layer.querySelector('#tech1-label').textContent = short(moves && moves.l3, '마무리');
-      layer.querySelector('#tech2-label').textContent = short(moves && moves.rush, '돌진');
-      layer.querySelector('#tech3-label').textContent = short(moves && moves.heavy, '강공');
-      layer.querySelector('#tech4-label').textContent = short(moves && moves.special, '비검');
+      for (const el of layer.querySelectorAll('[data-l]')) el.textContent = short(moves && moves[el.dataset.l], el.textContent);
     },
-    setRushCd(frac) { const el = layer.querySelector('#tech2-cd'); el.style.height = `${frac * 100}%`; },
+    setCooldowns(cds) { for (const el of layer.querySelectorAll('[data-cd]')) { const v = cds[el.dataset.cd] || 0; const max = { rush: 3.5, flurry: 4.5, sweep: 6, wavecast: 5 }[el.dataset.cd] || 1; el.style.height = `${Math.min(1, v / max) * 100}%`; } },
     showAimHint(on) { layer.querySelector('#aim-hint').classList.toggle('show', !!on); },
     setPotions(n) { layer.querySelector('#tb-potion-n').textContent = n; layer.querySelector('.tb-potion').classList.toggle('empty', n <= 0); },
     setSound(muted) { layer.querySelector('#tb-sound').textContent = muted ? '소리 꺼짐' : '소리 켜짐'; },
@@ -4857,6 +5043,9 @@ return { isTouchDevice, setupTouch };
 
 
 const TOUCH = isTouchDevice();
+const DIFFICULTIES = { normal: { name: '보통', hp: 0.8, dmg: 0.8 }, hard: { name: '어려움', hp: 1.0, dmg: 1.0 }, hell: { name: '귀살', hp: 1.35, dmg: 1.3 } };
+let difficulty = 'hard';
+try { difficulty = localStorage.getItem('taisho_diff') || 'hard'; if (!DIFFICULTIES[difficulty]) difficulty = 'hard'; } catch (_) { /* ignore */ }
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -4880,6 +5069,8 @@ let state = 'title';   // title | select | story | playing | paused | menu | dyi
 let wasLocked = false;
 let elapsed = 0, hitstop = 0, dawnEndTimer = 0;
 let endKind = null;
+let lives = 3;
+let reviveT = 0;
 let character = CHARACTERS[0];
 let progress = null;
 let chapter = getChapter(1);
@@ -4906,6 +5097,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') input.hold.tech1 = 0.0001;
   if (e.code === 'Digit2') input.hold.tech2 = 0.0001;
   if (e.code === 'Digit3') input.hold.heavy = 0.0001;
+  if (e.code === 'Digit4') input.hold.tech4 = 0.0001;
+  if (e.code === 'Digit5') input.hold.tech5 = 0.0001;
+  if (e.code === 'Digit6') input.hold.tech6 = 0.0001;
+  if (e.code === 'Digit7') input.special = true;
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'Tab' || e.code === 'KeyT') { e.preventDefault(); toggleMenu(); }
   if (e.code === 'Escape') { if (state === 'playing') pause(); else if (state === 'menu') closeMenu(); }
@@ -4916,6 +5111,9 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'Digit1') input.release.tech1 = true;
   if (e.code === 'Digit2') input.release.tech2 = true;
   if (e.code === 'Digit3') input.release.heavy = true;
+  if (e.code === 'Digit4') input.release.tech4 = true;
+  if (e.code === 'Digit5') input.release.tech5 = true;
+  if (e.code === 'Digit6') input.release.tech6 = true;
 });
 window.addEventListener('blur', () => { for (const k in input.keys) input.keys[k] = false; });
 document.addEventListener('mousemove', (e) => { if (state !== 'playing') return; input.mouseDX += e.movementX || 0; input.mouseDY += e.movementY || 0; });
@@ -4946,6 +5144,7 @@ ui.onSelect = (ch) => {
   showStory('intro');
 };
 ui.onStoryDone = () => storyDone();
+ui.onDifficulty = (d) => { if (DIFFICULTIES[d]) { difficulty = d; try { localStorage.setItem('taisho_diff', d); } catch (_) { /* ignore */ } ui.logLine(`난이도: ${DIFFICULTIES[d].name}`); } };
 ui.onWorld = () => { audio.init(); progress = progressOf(character.id); state = 'world'; ui.hideScreen(); ui.showWorld(progress); };
 ui.onWorldClose = () => { if (state === 'world') showTitle(); };
 ui.onChapterPick = (n) => {
@@ -4984,7 +5183,8 @@ function buildWorld() {
   stage = new Stage(scene, { mobile: TOUCH, theme: chapter.theme, nightLength: chapter.nightLength || 300 });
   player = new Player(scene, character, progress);
   const ps = stage.map.playerStart; player.pos.set(ps.x, 0, ps.z); player.yaw = Math.PI; player.camYaw = 0; player._camInit = false;
-  enemies = new EnemyManager(scene, chapter);
+  const D = DIFFICULTIES[difficulty];
+  enemies = new EnemyManager(scene, { ...chapter, scale: { hp: chapter.scale.hp * D.hp, dmg: chapter.scale.dmg * D.dmg } });
   enemies.stage = stage;
   // 동료
   allies = [];
@@ -5005,7 +5205,7 @@ function buildWorld() {
   };
   enemies.onKill = (e) => gainXp(Math.round((XP_REWARD[e.kind] || XP_REWARD.melee) * (1 + (chapter.id - 1) * 0.35)), null);
   enemies.onPickup = (k) => onPickup(k);
-  elapsed = 0; hitstop = 0; dawnEndTimer = 0; endKind = null;
+  elapsed = 0; hitstop = 0; dawnEndTimer = 0; endKind = null; lives = 3; reviveT = 0;
   Object.assign(stats, { kills: 0, maxCombo: 0, specials: 0, time: 0, xpGained: 0, goldGained: 0, itemsGained: 0 });
   // 상점 진열: 장마다 갱신
   if (progress && (!progress.shop || progress.shop.chapter !== chapter.id)) { progress.shop = { chapter: chapter.id, stock: makeShopStock(progress.level) }; progress.save(); }
@@ -5057,7 +5257,7 @@ function showTitle() {
   ui.hideSelect(); ui.hideStory(); ui.hideMenu();
   const pr = lastCharId ? progressOf(character.id) : null;
   const info = pr && (pr.cleared > 0 || pr.level > 1) ? `${character.name} · 제${pr.chapter}장 · Lv.${pr.level}` : null;
-  ui.showScreen('title', { continueInfo: info });
+  ui.showScreen('title', { continueInfo: info, difficulty, difficulties: DIFFICULTIES });
   audio.setMode('menu');
 }
 function showSelect() { state = 'select'; ui.hideScreen(); ui.hideMenu(); ui.showSelect(progressOf); audio.setMode('menu'); }
@@ -5115,7 +5315,7 @@ function frame() {
   const playing = state === 'playing';
   if (hitstop > 0) { hitstop -= dt; dt *= 0.08; }
   ctx.player = player; ctx.stage = stage; ctx.effects = effects; ctx.allies = allies;
-  ctx.onBossPhase = (b) => { ui.message('혈귀술 개방', `${b.name.split(' — ')[0]}의 공격이 거세진다`, 3); effects.addShake(0.5); };
+  ctx.onBossPhase = (b, ph) => { ui.message(ph >= 3 ? '혈귀술 전개' : '혈귀술 개방', `${b.name.split(' — ')[0]}의 공격이 ${ph >= 3 ? '쉴 새 없이 이어진다' : '거세진다'}`, 3); effects.addShake(0.5); };
 
   if (playing || state === 'dying') {
     if (playing) elapsed += dt;
@@ -5134,7 +5334,13 @@ function frame() {
         case 'dash': audio.sfx('dash'); break;
         case 'potion': audio.sfx('bell'); ui.logLine(`<b>회복약</b> 사용 — 남은 ${progress.potions}개`, 'potion'); ui.setProgress(progress); break;
         case 'potionFail': ui.logLine(progress.potions <= 0 ? '회복약이 없습니다' : '체력이 이미 가득합니다', 'warn'); break;
-        case 'dead': if (playing) { audio.sfx('dead'); setTimeout(() => endGame('defeat'), 1400); state = 'dying'; } break;
+        case 'dead':
+          if (playing) {
+            audio.sfx('dead');
+            if (lives > 1) { lives--; reviveT = 3.0; state = 'dying'; ui.message('쓰러졌다', `재도전 기회 ${lives}회 — 3초 후 다시 일어난다`, 3); }
+            else { lives = 0; setTimeout(() => endGame('defeat'), 1400); state = 'dying'; }
+          }
+          break;
         default: break;
       }
     }
@@ -5157,12 +5363,26 @@ function frame() {
   input.mouseDX = 0; input.mouseDY = 0;
   input.special = input.dash = input.potion = false;
 
-  if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); touch.setRushCd(player.rushCd / 3.5); touch.showAimHint(!!player.aim); }
+  if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); touch.setCooldowns(player.cds); touch.showAimHint(!!player.aim); }
   ui.setHP(player.hp, player.maxHp);
   ui.setGauge(player.gauge, player.gaugeMax);
   ui.setCombo(player.combo, player.comboPop);
   ui.setNight(stage.nightProgress, enemies.waveIndex, enemies.totalWaves, stats.kills, stage.isDawn, chapter);
   ui.setDash(player.dashCooldown / Math.max(0.05, player.skill.dashCooldown));
+  if (state === 'dying' && reviveT > 0) {
+    reviveT -= dt;
+    if (reviveT <= 0) {
+      // 재도전: 시작 지점에서 전체 체력으로 부활, 잠시 무적
+      const ps = stage.map.playerStart;
+      player.alive = true; player.hp = player.maxHp; player.invuln = 3; player.blink = 3; player.knock.set(0, 0, 0);
+      player.pos.set(ps.x, 0, ps.z); player.parts.body.rotation.x = 0; player.parts.body.position.y = 0;
+      effects.burst(player.center, { count: 50, colors: [0xffd9a0, 0xffffff, character.colors.glow], speed: 3, life: 1.0, size: 0.5, gravity: 1, drag: 1, up: 2 });
+      audio.sfx('bell');
+      state = 'playing'; lockPointer();
+      ui.message('다시 일어선다', `남은 재도전 ${lives}회`, 2.5);
+    }
+  }
+  ui.setLives(lives);
   if (playing || state === 'dying') ui.drawMinimap(stage, player, allies, enemies.list, enemies.pickups, chapter);
   if (allies.length && Math.floor(elapsed * 4) !== Math.floor((elapsed - dt) * 4)) ui.setAllies(allies);
   if (enemies.boss && enemies.boss.alive) ui.setBossHP(enemies.boss.hp, enemies.boss.maxHp);
