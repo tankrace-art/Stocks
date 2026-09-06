@@ -1,0 +1,91 @@
+:root {
+  --ink: #f3e9d8;
+  --ink-dim: rgba(243, 233, 216, 0.6);
+  --crimson: #b8322a;
+  --gold: #d9a640;
+  --indigo: #2d4370;
+  --serif: 'Shippori Mincho', 'Noto Serif KR', 'Yu Mincho', 'Hiragino Mincho ProN', 'Nanum Myeongjo', serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #070a18; font-family: var(--serif); color: var(--ink); }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: none; }
+#ui { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+#hud { position: absolute; inset: 0; }
+
+/* ---------- 상태(체력/게이지) ---------- */
+#status { position: absolute; left: 28px; top: 24px; width: 320px; }
+#status .label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; letter-spacing: 0.12em; color: var(--ink-dim); margin: 6px 2px 3px; }
+#status .label .kanji { font-size: 16px; color: var(--ink); font-weight: 700; }
+.bar { position: relative; height: 14px; background: rgba(8, 10, 20, 0.7); border: 1px solid rgba(243, 233, 216, 0.35); overflow: hidden; }
+.bar::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 24px, rgba(0,0,0,0.25) 24px 25px); pointer-events: none; z-index: 2; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transition: width 0.12s ease-out; }
+.bar.hp .fill { background: linear-gradient(90deg, #7d1f1a, var(--crimson) 60%, #e0554a); box-shadow: 0 0 10px rgba(184, 50, 42, 0.6); }
+.bar.hp .fill.low { animation: lowhp 0.7s ease-in-out infinite alternate; }
+@keyframes lowhp { from { filter: brightness(1); } to { filter: brightness(1.6); } }
+.bar.hp .ghost { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: rgba(255, 200, 180, 0.25); z-index: -1; }
+.bar.gauge { height: 10px; }
+.bar.gauge .fill { background: linear-gradient(90deg, #1e3a70, #3d7bd6 60%, #8ec5ff); box-shadow: 0 0 10px rgba(90, 160, 255, 0.6); }
+.bar.gauge .fill.full { background: linear-gradient(90deg, #6aa8ff, #ffffff 40%, #ffb35a 70%, #ff7a3a); animation: gaugeFull 0.9s ease-in-out infinite alternate; }
+@keyframes gaugeFull { from { box-shadow: 0 0 8px rgba(120, 190, 255, 0.7); filter: brightness(1); } to { box-shadow: 0 0 22px rgba(255, 170, 90, 1); filter: brightness(1.35); } }
+#special-hint { margin-top: 6px; font-size: 12px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 8px rgba(255, 170, 90, 0.8); }
+#special-hint.show { opacity: 1; animation: blink 1s ease-in-out infinite alternate; }
+@keyframes blink { from { opacity: 0.5; } to { opacity: 1; } }
+
+/* ---------- 대시 쿨다운 ---------- */
+#dash-cd { position: absolute; left: 28px; top: 132px; width: 320px; height: 3px; background: rgba(243,233,216,0.15); opacity: 0.25; }
+#dash-cd::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--cd, 100%); background: #cfe8ff; }
+
+/* ---------- 콤보 ---------- */
+#combo { position: absolute; right: 40px; top: 60px; text-align: right; opacity: 0; transform: translateX(20px); transition: opacity 0.25s, transform 0.25s; }
+#combo.show { opacity: 1; transform: translateX(0); }
+#combo-num { font-size: 84px; font-weight: 800; line-height: 1; color: var(--ink); text-shadow: 0 0 18px rgba(255, 255, 255, 0.35), 3px 3px 0 rgba(120, 20, 20, 0.7); transform-origin: right bottom; transition: transform 0.08s; font-variant-numeric: tabular-nums; }
+#combo-label { font-size: 22px; letter-spacing: 0.3em; margin-right: -0.3em; color: var(--ink-dim); }
+#combo.tier1 #combo-num { color: #ffe1a8; }
+#combo.tier2 #combo-num { color: #ffb45a; text-shadow: 0 0 22px rgba(255, 150, 60, 0.7), 3px 3px 0 rgba(120, 20, 20, 0.7); }
+#combo.tier3 #combo-num { color: #ff6a4a; text-shadow: 0 0 28px rgba(255, 90, 50, 0.9), 3px 3px 0 rgba(60, 0, 0, 0.9); }
+
+/* ---------- 보스 ---------- */
+#boss { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); width: min(620px, 60vw); opacity: 0; transition: opacity 0.6s; }
+#boss.show { opacity: 1; }
+#boss-name { text-align: center; font-size: 18px; letter-spacing: 0.25em; margin-bottom: 6px; text-shadow: 0 0 12px rgba(255, 40, 20, 0.6); }
+.bar.boss { height: 12px; border-color: rgba(255, 90, 60, 0.6); }
+.bar.boss .fill { background: linear-gradient(90deg, #4a0c10, #9c1a1a 50%, #ff3a2a); box-shadow: 0 0 14px rgba(255, 50, 30, 0.6); transition: width 0.2s; }
+
+/* ---------- 밤 진행 ---------- */
+#night { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); width: min(520px, 55vw); }
+#night-track { position: relative; height: 4px; background: rgba(243,233,216,0.15); }
+#night-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #4a5aa0, #d9a640); }
+#night-moon { position: absolute; top: -13px; transform: translateX(-50%); font-size: 18px; color: #ffe9b8; text-shadow: 0 0 10px rgba(255, 230, 180, 0.8); }
+#night-info { display: flex; justify-content: space-between; margin-top: 10px; font-size: 14px; letter-spacing: 0.2em; color: var(--ink-dim); }
+
+/* ---------- 조준점 ---------- */
+#crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(243,233,216,0.7); box-shadow: 0 0 6px rgba(0,0,0,0.8); }
+
+/* ---------- 메시지 ---------- */
+#message { position: absolute; left: 50%; top: 26%; transform: translate(-50%, -50%); text-align: center; opacity: 0; }
+#message.show { animation: msg 3.2s ease forwards; }
+@keyframes msg { 0% { opacity: 0; transform: translate(-50%, -40%) scale(0.96); letter-spacing: 0.6em; } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1); letter-spacing: 0.3em; } 80% { opacity: 1; } 100% { opacity: 0; } }
+#msg-title { font-size: 56px; font-weight: 800; letter-spacing: 0.3em; text-shadow: 0 0 24px rgba(0,0,0,0.9), 0 0 40px rgba(180, 40, 30, 0.5); }
+#msg-sub { font-size: 18px; margin-top: 8px; color: var(--ink-dim); letter-spacing: 0.12em; text-shadow: 0 0 12px rgba(0,0,0,0.9); }
+
+/* ---------- 피격 비네트 ---------- */
+#vignette { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(184, 50, 42, 0) 40%, rgba(184, 50, 42, 0.75) 100%); }
+
+/* ---------- 화면(타이틀/일시정지/결과) ---------- */
+.screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(7, 10, 24, 0.55), rgba(3, 4, 10, 0.92)); opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+.screen.show { opacity: 1; pointer-events: auto; cursor: pointer; }
+.screen .panel { text-align: center; padding: 44px 60px; border: 1px solid rgba(243, 233, 216, 0.3); background: rgba(10, 8, 14, 0.6); box-shadow: 0 0 0 6px rgba(10, 8, 14, 0.6), 0 0 60px rgba(0,0,0,0.8); max-width: 640px; }
+.screen .era { font-size: 13px; letter-spacing: 0.5em; color: var(--gold); margin-bottom: 14px; }
+.screen h1 { font-size: 72px; font-weight: 800; margin: 0; letter-spacing: 0.18em; text-shadow: 0 0 30px rgba(184, 50, 42, 0.6); }
+.screen.defeat h1 { color: #e0554a; }
+.screen.victory h1, .screen.survived h1 { color: #ffd9a0; text-shadow: 0 0 30px rgba(255, 190, 100, 0.6); }
+.screen .sub { font-size: 18px; margin-top: 10px; letter-spacing: 0.15em; color: var(--ink-dim); }
+.screen .body { margin: 22px 0 10px; font-size: 14px; line-height: 1.8; color: var(--ink-dim); }
+.screen .body b { color: #ff8a70; }
+.controls { margin: 18px auto 0; border-collapse: collapse; font-size: 14px; }
+.controls td { padding: 4px 16px; text-align: left; }
+.controls td:first-child { color: var(--gold); letter-spacing: 0.1em; text-align: right; border-right: 1px solid rgba(243,233,216,0.25); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 40px; margin-top: 8px; }
+.stats div { display: flex; justify-content: space-between; border-bottom: 1px dotted rgba(243,233,216,0.25); padding: 4px 0; }
+.stats b { color: var(--ink); font-size: 18px; }
+.screen .cta { margin-top: 26px; font-size: 16px; letter-spacing: 0.4em; color: var(--ink); animation: blink 1.2s ease-in-out infinite alternate; }
