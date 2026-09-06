@@ -16,7 +16,7 @@ body.touch #crosshair { display: none; }
 #hud { position: absolute; inset: 0; }
 
 /* ---------- 상태(체력/게이지) ---------- */
-#status { position: absolute; left: 28px; top: 24px; width: 320px; }
+#status { position: absolute; left: 216px; top: 24px; width: 300px; }
 #status .label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; letter-spacing: 0.12em; color: var(--ink-dim); margin: 6px 2px 3px; }
 #status .label .kanji { font-size: 16px; color: var(--ink); font-weight: 700; }
 .bar { position: relative; height: 14px; background: rgba(8, 10, 20, 0.7); border: 1px solid rgba(243, 233, 216, 0.35); overflow: hidden; }
@@ -35,7 +35,7 @@ body.touch #crosshair { display: none; }
 @keyframes blink { from { opacity: 0.5; } to { opacity: 1; } }
 
 /* ---------- 대시 쿨다운 ---------- */
-#dash-cd { position: absolute; left: 28px; top: 132px; width: 320px; height: 3px; background: rgba(243,233,216,0.15); opacity: 0.25; }
+#dash-cd { position: absolute; left: 216px; top: 132px; width: 300px; height: 3px; background: rgba(243,233,216,0.15); opacity: 0.25; }
 #dash-cd::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--cd, 100%); background: #cfe8ff; }
 
 /* ---------- 콤보 ---------- */
@@ -254,7 +254,7 @@ body.touch .gear-wrap { grid-template-columns: 1fr; }
 #gold-hud { color: #ffd040; }
 #allies { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
 .ally { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.ally .aname { width: 40px; letter-spacing: 0.1em; font-weight: 700; }
+.ally .aname { width: 58px; letter-spacing: 0.05em; font-weight: 700; white-space: nowrap; }
 .ally .abar { width: 120px; height: 5px; background: rgba(8,10,20,0.7); border: 1px solid rgba(243,233,216,0.3); display: inline-block; }
 .ally .abar span { display: block; height: 100%; background: linear-gradient(90deg, #4a8ab0, #8fc8ff); }
 .ally.down { opacity: 0.6; } .ally .adown { color: #ff9a80; font-size: 11px; }
@@ -304,8 +304,31 @@ body.touch .doll { transform: scale(0.92); transform-origin: top center; }
 
 /* 기술 버튼 줄 (오른쪽 조작키 아래) */
 #tech-row { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 8px; }
-#tech-row .tb.tech { position: static; width: 92px; height: 60px; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+#tech-row .tb.tech { position: static; width: 84px; height: 60px; overflow: hidden; border-radius: 12px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 #tech-row .tb.tech small { font-size: 10px; color: var(--ink-dim); letter-spacing: 0.15em; }
 #tech-row .tb.tech.tb-special { width: 104px; }
 body.touch #night { width: min(300px, 32vw); left: 42%; }
 @media (max-height: 460px) { #btns { bottom: calc(70px + env(safe-area-inset-bottom)); } #tech-row .tb.tech { width: 76px; height: 48px; font-size: 13px; } }
+
+/* ---------- 미니맵 / 세계 지도 ---------- */
+#minimap-wrap { position: absolute; left: 20px; top: 16px; width: 180px; }
+#minimap { display: block; width: 180px; height: 180px; border-radius: 50%; border: 1px solid rgba(243,233,216,0.35); background: radial-gradient(circle, rgba(8,10,20,0.35), rgba(8,10,20,0.75)); box-shadow: 0 0 18px rgba(0,0,0,0.6); }
+#minimap-label { text-align: center; font-size: 11px; letter-spacing: 0.1em; color: var(--ink-dim); margin-top: 4px; }
+body.touch #minimap-wrap { left: 14px; top: 10px; width: 140px; } body.touch #minimap { width: 140px; height: 140px; } body.touch #status { left: 168px; width: 260px; } body.touch #dash-cd { left: 168px; width: 260px; }
+.world-panel { width: min(1000px, 96vw); }
+.wmap { position: relative; width: 100%; aspect-ratio: 800 / 460; border: 1px solid rgba(243,233,216,0.25); overflow: hidden; background: #0e1020; }
+.wbg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wnode { position: absolute; transform: translate(-50%, -50%); width: 118px; padding: 8px 6px; border: 1px solid rgba(243,233,216,0.35); background: rgba(10,8,14,0.85); color: var(--ink); font-family: var(--serif); text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wnode .wicon { font-size: 22px; }
+.wnode .wname { font-size: 12px; line-height: 1.3; letter-spacing: 0.05em; }
+.wnode .wstate { font-size: 10px; color: var(--ink-dim); letter-spacing: 0.1em; }
+.wnode.cleared { border-color: var(--gold); } .wnode.cleared .wstate { color: var(--gold); }
+.wnode.current { border-color: #ffd9a0; box-shadow: 0 0 18px rgba(255,190,100,0.45); animation: blink 1.2s ease-in-out infinite alternate; }
+.wnode.locked { opacity: 0.45; cursor: default; filter: grayscale(1); }
+.wnode:not([disabled]):hover { transform: translate(-50%, -50%) scale(1.05); }
+@media (max-width: 700px) { .wnode { width: 84px; padding: 5px 4px; } .wnode .wname { font-size: 10px; } .wnode .wicon { font-size: 16px; } }
+
+#tech-row .tb.tech i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,0.55); pointer-events: none; }
+#tech-row .tb.tech { position: relative; }
+#aim-hint { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-size: 13px; letter-spacing: 0.1em; color: #ffd9a0; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
+#aim-hint.show { opacity: 1; }

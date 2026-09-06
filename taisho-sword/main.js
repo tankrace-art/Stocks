@@ -8,7 +8,7 @@ import { UI } from './ui.js';
 import { Effects } from './effects.js';
 import { isTouchDevice, setupTouch } from './touch.js';
 import { GameAudio } from './audio.js';
-import { CHARACTERS, Progress, XP_REWARD, getCharacter } from './characters.js';
+import { CHARACTERS, Progress, XP_REWARD, getCharacter, getAlly } from './characters.js';
 import { RARITIES, POTION_MAX, BAG_MAX, POTION_PRICE, makeShopStock, sellPrice } from './items.js';
 import { CHAPTERS, getChapter } from './scenario.js';
 
@@ -47,7 +47,7 @@ let lastCharId = null;
 try { lastCharId = localStorage.getItem('taisho_last_char'); if (lastCharId) character = getCharacter(lastCharId); } catch (_) { /* ignore */ }
 
 // ---------- 입력 ----------
-const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, tech1: false, tech2: false };
+const input = { keys: {}, mouseDX: 0, mouseDY: 0, axisX: 0, axisY: 0, light: false, heavy: false, special: false, dash: false, potion: false, tech1: false, tech2: false, hold: {}, release: {} };
 if (TOUCH) {
   touch = setupTouch(input, { onPause: () => pause(), onMenu: () => toggleMenu(), onSound: () => toggleSound() });
   touch.setSound(audio.muted);
@@ -59,17 +59,24 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.dash = true;
   if (e.code === 'KeyF' || e.code === 'Space') { input.special = true; if (state === 'playing') e.preventDefault(); }
   if (e.code === 'KeyQ') input.potion = true;
-  if (e.code === 'Digit1') input.tech1 = true;
-  if (e.code === 'Digit2') input.tech2 = true;
+  if (e.code === 'Digit1') input.hold.tech1 = 0.0001;
+  if (e.code === 'Digit2') input.hold.tech2 = 0.0001;
+  if (e.code === 'Digit3') input.hold.heavy = 0.0001;
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'Tab' || e.code === 'KeyT') { e.preventDefault(); toggleMenu(); }
   if (e.code === 'Escape') { if (state === 'playing') pause(); else if (state === 'menu') closeMenu(); }
   if ((e.code === 'Enter' || e.code === 'Space') && state === 'story') { e.preventDefault(); storyDone(); }
 });
-window.addEventListener('keyup', (e) => { input.keys[e.code] = false; });
+window.addEventListener('keyup', (e) => {
+  input.keys[e.code] = false;
+  if (e.code === 'Digit1') input.release.tech1 = true;
+  if (e.code === 'Digit2') input.release.tech2 = true;
+  if (e.code === 'Digit3') input.release.heavy = true;
+});
 window.addEventListener('blur', () => { for (const k in input.keys) input.keys[k] = false; });
 document.addEventListener('mousemove', (e) => { if (state !== 'playing') return; input.mouseDX += e.movementX || 0; input.mouseDY += e.movementY || 0; });
-canvas.addEventListener('mousedown', (e) => { if (state !== 'playing') return; if (e.button === 0) input.light = true; if (e.button === 2) input.heavy = true; });
+canvas.addEventListener('mousedown', (e) => { if (state !== 'playing') return; if (e.button === 0) input.hold.light = 0.0001; if (e.button === 2) input.hold.heavy = 0.0001; });
+window.addEventListener('mouseup', (e) => { if (e.button === 0 && input.hold.light) input.release.light = true; if (e.button === 2 && input.hold.heavy) input.release.heavy = true; });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 document.getElementById('ui').addEventListener('contextmenu', (e) => { if (!e.target.closest('.item')) e.preventDefault(); });
 document.addEventListener('pointerlockchange', () => {
@@ -82,7 +89,7 @@ ui.screen.addEventListener('click', () => {
   audio.init();
   if (state === 'paused') resume();
   else if (state === 'ended') {
-    if (endKind === 'defeat') { showStory('intro'); }        // 같은 장 다시 도전
+    if (endKind === 'defeat') { showStory('intro'); }
     else { progress.restart(); showTitle(); }                // 엔딩 → 처음으로
   }
 });
@@ -95,6 +102,14 @@ ui.onSelect = (ch) => {
   showStory('intro');
 };
 ui.onStoryDone = () => storyDone();
+ui.onWorld = () => { audio.init(); progress = progressOf(character.id); state = 'world'; ui.hideScreen(); ui.showWorld(progress); };
+ui.onWorldClose = () => { if (state === 'world') showTitle(); };
+ui.onChapterPick = (n) => {
+  audio.init();
+  progress.chapter = n; progress.save();
+  ui.hideWorld(); ui.hideMenu();
+  showStory('intro');
+};
 ui.onMenuClose = () => closeMenu();
 ui.onLearn = () => { player.applySkills(); audio.sfx('start'); };
 ui.onResetSkills = () => player.applySkills();
@@ -122,19 +137,24 @@ function toggleSound() { audio.init(); const muted = audio.toggleMute(); if (tou
 function buildWorld() {
   chapter = getChapter(progress ? progress.chapter : 1);
   effects = new Effects(scene);
-  stage = new Stage(scene, { mobile: TOUCH, theme: chapter.theme });
+  stage = new Stage(scene, { mobile: TOUCH, theme: chapter.theme, nightLength: chapter.nightLength || 300 });
   player = new Player(scene, character, progress);
+  const ps = stage.map.playerStart; player.pos.set(ps.x, 0, ps.z); player.yaw = Math.PI; player.camYaw = 0; player._camInit = false;
   enemies = new EnemyManager(scene, chapter);
+  enemies.stage = stage;
   // 동료
   allies = [];
-  const allyIds = progress ? progress.allies : [];
-  allyIds.slice(0, 2).forEach((id, i) => allies.push(new Ally(scene, getCharacter(id), i)));
+  // 동료: 저장된 동료 + 이 장에서 함께하는 주(柱)·대원 (주인공 본인 제외), 최대 3명
+  const ids = [...new Set([...(chapter.joinAllyStart || []), ...(progress ? progress.allies : [])])].filter((id) => id !== character.id).slice(0, 3);
+  ids.forEach((id, i) => { const def = getAlly(id); if (!def) return; const a = new Ally(scene, def, i); a.pos.set(ps.x - 2 + i * 2, 0, ps.z + 1.5); allies.push(a); });
+  enemies.onBossDown = (b) => { ui.message('격파', `${b.name.split(' — ')[0]}을(를) 베었다 — 다음 상대가 온다`, 3.5); ui.hideBoss(); audio.sfx('bell'); gainXp(XP_REWARD.boss, '혈귀 격파'); };
+  enemies.onBossRegen = () => { ui.message('재생', '무잔은 죽지 않는다 — 햇빛이 뜰 때까지 버텨라', 2.5); };
   enemies.onMessage = (t, s) => ui.message(t, s);
   enemies.onWave = (i) => { audio.sfx('gong'); if (i > 0) gainXp(XP_REWARD.wave, '파도 돌파'); };
   enemies.onBossSpawn = (b) => { ui.showBoss(b.name); effects.addShake(0.6); audio.setMode('boss'); audio.sfx('roar'); };
   enemies.onBossDefeated = () => {
     stage.triggerDawn();
-    ui.message('새벽', '보스를 베었다 — 요괴들이 재가 되어 흩어진다', 4);
+    ui.message('새벽', '도깨비를 베었다 — 남은 도깨비들이 재가 되어 흩어진다', 4);
     endKind = 'clear';
     audio.setMode('dawn'); audio.sfx('bell');
     gainXp(XP_REWARD.night * chapter.id, '밤을 넘김');
@@ -222,10 +242,10 @@ function startGame() {
   audio.setMode('night'); audio.sfx('start');
 }
 function finishChapter() {
-  // 장 클리어: 동료 합류 + 진행 저장
-  const ally = chapter.joinAlly ? CHARACTERS.filter((c) => c.id !== character.id && !progress.allies.includes(c.id))[Math.floor(Math.random() * 4)] : null;
-  progress.clearChapter(chapter.id, ally ? ally.id : null);
-  if (ally) ui.logLine(`<b>${ally.name}</b> 합류!`);
+  // 장 클리어: 동료 합류/이탈 + 진행 저장
+  const joins = [...(chapter.joinAllyStart || []), ...(chapter.joinAlly ? [chapter.joinAlly] : [])].filter((id) => id !== character.id);
+  const leaves = chapter.leaveAlly ? [chapter.leaveAlly] : [];
+  progress.clearChapter(chapter.id, joins, leaves);
   state = 'story';
   showStory('clear');
 }
@@ -251,7 +271,7 @@ function frame() {
   const playing = state === 'playing';
   if (hitstop > 0) { hitstop -= dt; dt *= 0.08; }
   ctx.player = player; ctx.stage = stage; ctx.effects = effects; ctx.allies = allies;
-  ctx.onBossPhase = () => { ui.message('격앙', '보스가 분노한다 — 공격이 거세진다', 3); effects.addShake(0.5); };
+  ctx.onBossPhase = (b) => { ui.message('혈귀술 개방', `${b.name.split(' — ')[0]}의 공격이 거세진다`, 3); effects.addShake(0.5); };
 
   if (playing || state === 'dying') {
     if (playing) elapsed += dt;
@@ -279,7 +299,7 @@ function frame() {
     stats.maxCombo = Math.max(stats.maxCombo, player.combo);
     if (playing && stage.isDawn) {
       enemies.dissolveAll(effects);
-      if (!endKind) { endKind = 'clear'; ui.message('새벽', '밤을 버텨냈다 — 요괴들이 재가 되어 흩어진다', 4); ui.hideBoss(); audio.setMode('dawn'); audio.sfx('bell'); gainXp(XP_REWARD.night, '밤을 버팀'); }
+      if (!endKind) { endKind = 'clear'; ui.message('새벽', chapter.dawnClear ? '해가 떴다 — 도깨비가 햇빛에 타오른다' : '밤을 버텨냈다 — 도깨비들이 재가 되어 흩어진다', 4); ui.hideBoss(); audio.setMode('dawn'); audio.sfx('bell'); gainXp(XP_REWARD.night * chapter.id, '밤을 버팀'); }
       dawnEndTimer += dt;
       if (dawnEndTimer > 6.5) { stats.time = elapsed; finishChapter(); }
     }
@@ -291,14 +311,15 @@ function frame() {
     player.updateCamera(camera, dt, effects.shake);
   }
   input.mouseDX = 0; input.mouseDY = 0;
-  input.light = input.heavy = input.special = input.dash = input.potion = input.tech1 = input.tech2 = false;
+  input.special = input.dash = input.potion = false;
 
-  if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); }
+  if (touch) { touch.setActive(playing); touch.setSpecialReady(player.specialReady); touch.setPotions(progress ? progress.potions : 0); touch.setRushCd(player.rushCd / 3.5); touch.showAimHint(!!player.aim); }
   ui.setHP(player.hp, player.maxHp);
   ui.setGauge(player.gauge, player.gaugeMax);
   ui.setCombo(player.combo, player.comboPop);
   ui.setNight(stage.nightProgress, enemies.waveIndex, enemies.totalWaves, stats.kills, stage.isDawn, chapter);
   ui.setDash(player.dashCooldown / Math.max(0.05, player.skill.dashCooldown));
+  if (playing || state === 'dying') ui.drawMinimap(stage, player, allies, enemies.list, enemies.pickups, chapter);
   if (allies.length && Math.floor(elapsed * 4) !== Math.floor((elapsed - dt) * 4)) ui.setAllies(allies);
   if (enemies.boss && enemies.boss.alive) ui.setBossHP(enemies.boss.hp, enemies.boss.maxHp);
   else if (enemies.boss && !enemies.boss.alive) ui.hideBoss();

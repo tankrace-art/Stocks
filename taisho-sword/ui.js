@@ -2,6 +2,8 @@
 import { clamp } from './util.js';
 import { CHARACTERS, SKILLS, SKILL_BRANCHES, xpToNext, getCharacter } from './characters.js';
 import { RARITIES, SLOTS, STATS, ICONS, itemScore, sellPrice, POTION_PRICE, POTION_MAX } from './items.js';
+import { CHAPTERS } from './scenario.js';
+import { WORLD_NODES } from './maps.js';
 
 const SLOT_ORDER = ['weapon', 'head', 'chest', 'belt', 'arms', 'legs', 'charm'];
 
@@ -11,6 +13,7 @@ export class UI {
     this.root = document.getElementById('ui');
     this.root.innerHTML = `
       <div id="hud">
+        <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas><div id="minimap-label"></div></div>
         <div id="status">
           <div class="label"><span class="kanji" id="hud-name">체력</span><span id="hp-text">100</span></div>
           <div class="bar hp"><div class="fill" id="hp-fill"></div></div>
@@ -41,7 +44,7 @@ export class UI {
       </div>
       <div id="screen" class="screen">
         <div class="panel">
-          <div class="era">다이쇼 12년 · 검사단</div>
+          <div class="era">다이쇼 시대 · 귀살대</div>
           <h1 id="screen-title">대숲의 밤</h1>
           <div id="screen-sub" class="sub"></div>
           <div id="screen-body" class="body"></div>
@@ -49,21 +52,25 @@ export class UI {
         </div>
       </div>
       <div id="story" class="screen"><div class="story-panel"><div class="era" id="story-chapter"></div><h1 id="story-title"></h1><div class="sub" id="story-place"></div><div id="story-lines"></div><div class="cta" id="story-cta"></div></div></div>
-      <div id="select" class="screen"><div class="select-wrap"><div class="era">검사를 고르시오</div><div id="select-cards"></div><div class="tip">한 번 고른 검사로 1장부터 5장까지 이야기를 이어 갑니다 · 캐릭터마다 진행이 따로 저장됩니다</div></div></div>
+      <div id="select" class="screen"><div class="select-wrap"><div class="era">주인공을 고르시오</div><div id="select-cards"></div><div class="tip">한 번 고른 주인공으로 1장부터 최종장까지 이야기를 이어 갑니다 · 나머지 둘은 3장부터 동료로 함께 싸웁니다</div></div></div>
       <div id="menu" class="screen">
         <div class="menu-panel">
           <div class="menu-head">
-            <div class="menu-tabs"><button class="tab on" data-tab="skills">스킬 트리</button><button class="tab" data-tab="gear">장비</button><button class="tab" data-tab="shop">상점</button></div>
+            <div class="menu-tabs"><button class="tab on" data-tab="skills">스킬 트리</button><button class="tab" data-tab="gear">장비</button><button class="tab" data-tab="shop">상점</button><button class="tab" data-tab="world">지도</button></div>
             <div id="menu-info"></div>
             <button id="menu-close">닫기 (Tab)</button>
           </div>
           <div id="menu-skills" class="menu-body"></div>
           <div id="menu-gear" class="menu-body" hidden></div>
           <div id="menu-shop" class="menu-body" hidden></div>
+          <div id="menu-world" class="menu-body" hidden></div>
         </div>
       </div>
+      <div id="world" class="screen"><div class="menu-panel world-panel"><div class="menu-head"><div class="era">세계 지도 — 도깨비의 밤이 내린 땅</div><button id="world-close">닫기</button></div><div id="world-body"></div></div></div>
     `;
     this.$ = (id) => document.getElementById(id);
+    this.mm = this.$('minimap').getContext('2d');
+    this.mmLabel = this.$('minimap-label');
     const ids = ['hp-fill', 'hp-text', 'hud-name', 'gauge-fill', 'gauge-text', 'special-hint', 'level-text', 'xp-text', 'xp-fill', 'potion-text', 'potion-hud', 'gold-text', 'allies', 'log',
       'combo', 'combo-num', 'move', 'move-text', 'boss', 'boss-name', 'boss-fill', 'night-fill', 'night-moon', 'wave-text', 'chapter-text', 'kill-text', 'message', 'msg-title', 'msg-sub', 'vignette', 'dash-cd', 'screen', 'story', 'select', 'menu'];
     this.el = {}; for (const id of ids) this.el[id] = this.$(id);
@@ -77,7 +84,76 @@ export class UI {
     for (const b of this.menu.querySelectorAll('.tab')) b.addEventListener('click', () => this.setMenuTab(b.dataset.tab));
     this.$('menu-close').addEventListener('click', () => this.onMenuClose && this.onMenuClose());
     this.$('story-cta').addEventListener('click', () => this.onStoryDone && this.onStoryDone());
+    this.$('world-close').addEventListener('click', () => { this.hideWorld(); this.onWorldClose && this.onWorldClose(); });
+    this.onChapterPick = null; this.onWorldClose = null; this.onWorld = null;
   }
+
+  // ---------- 미니맵 ----------
+  drawMinimap(stage, player, allies, enemies, pickups, chapter) {
+    const c = this.mm; if (!c || !stage) return;
+    const W = 180, cx = 90, cy = 90;
+    const s = 78 / (stage.extent + 1.5);
+    c.clearRect(0, 0, W, W);
+    const b = stage.bounds;
+    c.save(); c.translate(cx, cy);
+    c.fillStyle = 'rgba(8,10,20,0.55)'; c.strokeStyle = 'rgba(243,233,216,0.55)'; c.lineWidth = 1.2;
+    c.beginPath();
+    if (b.type === 'circle') c.arc(0, 0, b.r * s, 0, Math.PI * 2);
+    else if (b.type === 'rect') c.rect(-b.w / 2 * s, -b.h / 2 * s, b.w * s, b.h * s);
+    else { const w = b.w / 2 * s, L = b.len / 2 * s, H = b.hall * s; c.moveTo(-w, -L); c.lineTo(w, -L); c.lineTo(w, -H); c.lineTo(H, -H); c.lineTo(H, -w); c.lineTo(L, -w); c.lineTo(L, w); c.lineTo(H, w); c.lineTo(H, H); c.lineTo(w, H); c.lineTo(w, L); c.lineTo(-w, L); c.lineTo(-w, H); c.lineTo(-H, H); c.lineTo(-H, w); c.lineTo(-L, w); c.lineTo(-L, -w); c.lineTo(-H, -w); c.lineTo(-H, -H); c.lineTo(-w, -H); c.closePath(); }
+    c.fill(); c.stroke();
+    // 구조물
+    c.fillStyle = 'rgba(243,233,216,0.35)';
+    for (const o of stage.obstacles) { if (o.r < 0.45) continue; c.beginPath(); c.arc(o.x * s, o.z * s, Math.max(1.2, o.r * s), 0, Math.PI * 2); c.fill(); }
+    // 관심 지점
+    c.font = '10px serif'; c.textAlign = 'center'; c.fillStyle = '#ffd9a0';
+    for (const p of stage.poi) c.fillText({ torii: '⛩', shrine: '⛩', pond: '◯', throne: '♛', gate: '▯', hall: '◈', path: '⋯' }[p.icon] || '•', p.x * s, p.z * s + 3);
+    // 아이템
+    for (const k of pickups) { c.fillStyle = k.type === 'gold' ? '#ffd040' : k.type === 'potion' ? '#ff6080' : RARITIES[k.item.rarity].color; c.beginPath(); c.arc(k.group.position.x * s, k.group.position.z * s, 2, 0, Math.PI * 2); c.fill(); }
+    // 적
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      c.fillStyle = e.isBoss ? '#ff3a2a' : '#ff6a5a';
+      c.beginPath(); c.arc(e.pos.x * s, e.pos.z * s, e.isBoss ? 5 : 2.6, 0, Math.PI * 2); c.fill();
+      if (e.isBoss) { c.strokeStyle = '#ff3a2a'; c.beginPath(); c.arc(e.pos.x * s, e.pos.z * s, 8 + Math.sin(performance.now() * 0.006) * 2, 0, Math.PI * 2); c.stroke(); }
+    }
+    // 동료
+    for (const a of allies) { c.fillStyle = a.alive ? '#8fc8ff' : '#607080'; c.beginPath(); c.arc(a.pos.x * s, a.pos.z * s, 3, 0, Math.PI * 2); c.fill(); }
+    // 플레이어 (화살표)
+    c.save(); c.translate(player.pos.x * s, player.pos.z * s); c.rotate(-player.yaw + Math.PI);
+    c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(0, -6); c.lineTo(4.5, 5); c.lineTo(0, 2.5); c.lineTo(-4.5, 5); c.closePath(); c.fill();
+    c.restore();
+    c.restore();
+    // 나침반 N
+    c.fillStyle = 'rgba(243,233,216,0.7)'; c.font = '11px serif'; c.textAlign = 'center'; c.fillText('N', cx, 12);
+    if (chapter) this.mmLabel.textContent = `${chapter.title} · ${chapter.name}`;
+  }
+
+  // ---------- 세계 지도 ----------
+  worldHtml(progress) {
+    const unlockedMax = Math.min(CHAPTERS.length, (progress ? progress.cleared : 0) + 1);
+    const nodes = WORLD_NODES.map((n) => {
+      const ch = CHAPTERS[n.chapter - 1]; if (!ch) return '';
+      const state = n.chapter <= (progress ? progress.cleared : 0) ? 'cleared' : n.chapter === unlockedMax ? 'current' : 'locked';
+      return `<button class="wnode ${state}" style="left:${n.x}%;top:${n.y}%" data-ch="${n.chapter}" ${state === 'locked' ? 'disabled' : ''}>
+        <span class="wicon">${n.icon}</span><span class="wname">${ch.title}<br>${ch.name}</span><span class="wstate">${state === 'cleared' ? '클리어 · 다시 가기' : state === 'current' ? '지금 여기' : '아직 잠김'}</span></button>`;
+    }).join('');
+    const path = WORLD_NODES.map((n, i) => `${i ? 'L' : 'M'} ${n.x * 8} ${n.y * 4.6}`).join(' ');
+    return `<div class="wmap">
+      <svg class="wbg" viewBox="0 0 800 460" preserveAspectRatio="none">
+        <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1c33"/><stop offset="1" stop-color="#0e1020"/></linearGradient></defs>
+        <rect width="800" height="460" fill="url(#wg)"/>
+        <path d="M0 380 Q120 300 240 360 T480 330 T800 380 V460 H0 Z" fill="#141a2a"/>
+        <path d="M0 250 L90 150 L160 230 L240 120 L330 220 L400 90 L470 200 L560 130 L640 210 L720 110 L800 200 V460 H0 Z" fill="#1c2238" opacity="0.8"/>
+        <path d="M0 300 L120 210 L200 280 L290 190 L380 270 L450 170 L540 260 L620 190 L700 270 L800 210 V460 H0 Z" fill="#232a44" opacity="0.8"/>
+        <path d="M60 460 C 140 380, 200 420, 300 350 S 520 300, 620 250 S 760 190, 800 120" stroke="#3a4a7a" stroke-width="10" fill="none" opacity="0.6"/>
+        <path d="${path}" stroke="#ffd9a0" stroke-width="2" stroke-dasharray="6 6" fill="none" opacity="0.7"/>
+      </svg>${nodes}</div>
+      <div class="menu-foot"><span>클리어한 지역은 다시 도전해 장비·경험치를 모을 수 있습니다. 새 지역은 이전 지역을 클리어하면 열립니다.</span></div>`;
+  }
+  _bindWorld(box) { for (const n of box.querySelectorAll('.wnode:not([disabled])')) n.addEventListener('click', () => this.onChapterPick && this.onChapterPick(Number(n.dataset.ch))); }
+  showWorld(progress) { const box = this.$('world-body'); box.innerHTML = this.worldHtml(progress); this._bindWorld(box); this.$('world').className = 'screen show'; }
+  hideWorld() { this.$('world').className = 'screen'; }
 
   // ---------- HUD ----------
   setHP(cur, max) {
@@ -158,14 +234,15 @@ export class UI {
     this.screen.className = `screen show ${kind}`;
     const act = this.touch ? '터치하여' : '클릭하여';
     if (kind === 'title') {
-      t.textContent = '대숲의 밤';
-      s.textContent = '다이쇼 검극 — 요괴의 밤을 베어라';
+      t.textContent = '귀살의 밤';
+      s.textContent = '다이쇼 검극 — 도깨비의 밤을 베어라';
       const cont = stats.continueInfo;
       b.innerHTML = `
-        <p>다이쇼 12년. 마을을 덮친 요괴를 쫓아 검을 든 검사의 이야기.<br>첫 요괴부터 검사단, 여섯 장군, 그리고 무한 미궁성의 귀왕까지 — 다섯 장의 밤.</p>
+        <p>다이쇼 시대. 가족을 잃고 도깨비가 된 여동생을 되돌리기 위해 검을 든 소년들의 이야기.<br>최종 선별부터 무한열차, 유곽, 무한성, 그리고 새벽의 무잔 결전까지 — 여덟 장의 밤.</p>
         <div class="title-btns">
           ${cont ? `<button id="btn-continue" class="big">이어하기<span>${cont}</span></button>` : ''}
           <button id="btn-new" class="big ${cont ? '' : 'primary'}">새로 시작<span>검사 선택</span></button>
+          ${cont ? '<button id="btn-world" class="big">세계 지도<span>지역 고르기</span></button>' : ''}
         </div>
         ${this.touch ? `<table class="controls compact">
           <tr><td>왼쪽 화면</td><td>드래그로 이동</td></tr>
@@ -179,6 +256,7 @@ export class UI {
       c.textContent = '';
       const bc = this.$('btn-continue'); if (bc) bc.addEventListener('click', (e) => { e.stopPropagation(); this.onContinue && this.onContinue(); });
       this.$('btn-new').addEventListener('click', (e) => { e.stopPropagation(); this.onNew && this.onNew(); });
+      const bw = this.$('btn-world'); if (bw) bw.addEventListener('click', (e) => { e.stopPropagation(); this.onWorld && this.onWorld(); });
     } else if (kind === 'pause') {
       t.textContent = '일시정지'; s.textContent = '숨을 고른다';
       b.innerHTML = this.touch ? '' : '<p class="tip">Tab — 장비·스킬·상점 · M — 소리</p>';
@@ -187,7 +265,7 @@ export class UI {
       t.textContent = '산화'; s.textContent = '검사는 쓰러졌다… 얻은 경험과 장비, 금화는 남는다.';
       b.innerHTML = this._stats(stats); c.textContent = `${act} 다시 도전`;
     } else if (kind === 'ending') {
-      t.textContent = '새벽'; s.textContent = '요괴의 시대가 끝났다. 다섯 밤을 모두 넘긴 검사에게 경의를.';
+      t.textContent = '새벽'; s.textContent = '도깨비의 시대가 끝났다. 여덟 밤을 모두 넘긴 검사에게 경의를.';
       b.innerHTML = this._stats(stats); c.textContent = `${act} 처음으로`;
     }
   }
@@ -255,9 +333,10 @@ export class UI {
     const pr = this.progress, ch = this.character;
     if (!pr) return;
     for (const b of this.menu.querySelectorAll('.tab')) b.classList.toggle('on', b.dataset.tab === this.menuTab);
-    for (const k of ['skills', 'gear', 'shop']) this.$(`menu-${k}`).hidden = this.menuTab !== k;
+    for (const k of ['skills', 'gear', 'shop', 'world']) this.$(`menu-${k}`).hidden = this.menuTab !== k;
     this.$('menu-info').innerHTML = `<b>${ch.name}</b> · Lv.${pr.level} · 경험치 ${Math.floor(pr.xp)}/${xpToNext(pr.level)} · <span class="pts ${pr.points ? 'on' : ''}">스킬 포인트 ${pr.points}</span> · 회복약 ${pr.potions} · <span class="gold">${ICONS.gold} ${pr.gold}</span>`;
-    if (this.menuTab === 'skills') this._renderSkills(); else if (this.menuTab === 'gear') this._renderGear(); else this._renderShop();
+    if (this.menuTab === 'skills') this._renderSkills(); else if (this.menuTab === 'gear') this._renderGear(); else if (this.menuTab === 'shop') this._renderShop();
+    else { const box = this.$('menu-world'); box.innerHTML = this.worldHtml(pr); this._bindWorld(box); }
   }
   _renderSkills() {
     const pr = this.progress;

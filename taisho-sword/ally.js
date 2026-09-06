@@ -27,6 +27,7 @@ export class Ally {
     this.target = null;
     this.speed = character.stats.speed * 0.95;
     this.dmg = 14 * character.stats.dmg;
+    this.hero = !!character.moves; // 주인공 동료 여부
     this.kills = 0;
     this.isAlly = true;
   }
@@ -62,7 +63,7 @@ export class Ally {
       P.visible = true;
       if (this.downT <= 0) {
         this.alive = true; this.hp = Math.round(this.maxHp * 0.5); this.invuln = 2;
-        ctx.effects.burst(this.center, { count: 30, colors: [this.ch.colors.glow, 0xffffff], speed: 3, life: 0.8, size: 0.4, gravity: 1, drag: 1, up: 2 });
+        ctx.effects.burst(this.center, { count: 30, colors: [(this.ch.special ? this.ch.special.c1 : this.ch.colors.glow), 0xffffff], speed: 3, life: 0.8, size: 0.4, gravity: 1, drag: 1, up: 2 });
         ctx.sfx && ctx.sfx('bell');
       }
       return;
@@ -94,7 +95,7 @@ export class Ally {
         if (d < 2.6 + e.radius) {
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
           const killed = e.takeHit(this.dmg, dir, 3, 0.25, ctx.effects);
-          ctx.effects.sparks(new THREE.Vector3(e.pos.x, e.pos.y + e.height * 0.55, e.pos.z), dir, [this.ch.colors.glow, 0xffffff]);
+          ctx.effects.sparks(new THREE.Vector3(e.pos.x, e.pos.y + e.height * 0.55, e.pos.z), dir, [(this.ch.special ? this.ch.special.c1 : this.ch.colors.glow), 0xffffff]);
           ctx.sfx && ctx.sfx(killed ? 'kill' : 'hit');
           if (killed) this.kills++;
         }
@@ -109,7 +110,7 @@ export class Ally {
       if (d > 2.0 + e.radius) { move.set(dx / d, 0, dz / d).multiplyScalar(this.speed * dt); this.moving = true; }
       else if (this.attackCd <= 0) {
         this.attackT = 0.38; this.attackSide = (this.attackSide || 1) * -1;
-        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut: 2.4, angle: 2.2, tilt: 0.2 * this.attackSide, roll: 0.2, color: this.ch.colors.glow, life: 0.2, sweep: this.attackSide, y: 1.1 });
+        ctx.effects.slashArc(this.pos, this.yaw, { rIn: 0.5, rOut: 2.4, angle: 2.2, tilt: 0.2 * this.attackSide, roll: 0.2, color: (this.ch.special ? this.ch.special.c1 : this.ch.colors.glow), life: 0.2, sweep: this.attackSide, y: 1.1 });
         ctx.sfx && ctx.sfx('swing');
       }
     } else {

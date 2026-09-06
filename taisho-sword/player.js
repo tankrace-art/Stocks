@@ -36,6 +36,12 @@ const ATTACKS = {
     fx: { sweep: -1, tilt: -0.9, roll: 0.7, color: 0xffd28a, y: 1.2, rOut: 3.1 }, stagger: 0.7, hitstop: 0.11, shake: 0.45,
     next: null, heavy: true,
   },
+  rush: {
+    dur: 0.55, active: [0.08, 0.36], dmg: 20, range: 2.0, arc: 1.4, knock: 5, gauge: 10, lunge: 16,
+    windup: { x: -1.3, y: 1.2, z: 0 }, end: { x: -1.1, y: -1.1, z: 0 },
+    fx: { sweep: -1, tilt: 0.1, roll: 0.3, color: 0xffffff, y: 1.0, rOut: 2.2 }, stagger: 0.5, hitstop: 0.05, shake: 0.25,
+    next: null, rush: true, cooldown: 3.5,
+  },
   special: {
     dur: 1.35, active: [0.28, 0.62], dmg: 55, range: 4.6, arc: Math.PI * 2 + 1, knock: 13, gauge: 0, lunge: 0,
     windup: { x: -1.4, y: -1.2, z: 0 }, end: { x: -1.4, y: -1.2, z: 0 },
@@ -44,8 +50,71 @@ const ATTACKS = {
   },
 };
 
+// 셀 셰이딩용 3단 그라데이션
+let GRADIENT = null;
+function gradientMap() {
+  if (GRADIENT) return GRADIENT;
+  const data = new Uint8Array([70, 70, 70, 255, 150, 150, 150, 255, 255, 255, 255, 255]);
+  GRADIENT = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  GRADIENT.minFilter = THREE.NearestFilter; GRADIENT.magFilter = THREE.NearestFilter; GRADIENT.needsUpdate = true;
+  return GRADIENT;
+}
 function mat(color, extra = {}) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
+  return new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), ...extra });
+}
+const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: 0x14121c, side: THREE.BackSide });
+
+// 애니메이션풍 얼굴 텍스처 (캔버스): 큰 눈·하이라이트·눈썹·입·볼터치. closed=true면 감은 눈
+function makeFaceTexture(ch, closed = false) {
+  const W = 512, H = 512;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
+  g.fillStyle = hex(SKIN); g.fillRect(0, 0, W, H);
+  const cx = W * 0.25, ey = H * 0.47, gap = 30, ew = 26, eh = 22;
+  const iris = hex(ch.colors.eye || 0x3060a0), hair = hex(ch.colors.hair);
+  const tilt = ch.look && ch.look.browTilt !== undefined ? ch.look.browTilt : 0.15;
+  for (const s of [-1, 1]) {
+    const x = cx + s * gap;
+    if (closed) {
+      g.strokeStyle = '#3a2a2a'; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.arc(x, ey + 6, ew * 0.9, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+    } else {
+      // 흰자 (아몬드형)
+      g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, 0, Math.PI * 2); g.fill();
+      // 홍채 (그라데이션)
+      const gr = g.createLinearGradient(x, ey - eh, x, ey + eh);
+      gr.addColorStop(0, '#1a1a2a'); gr.addColorStop(0.45, iris); gr.addColorStop(1, '#ffffff');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(x, ey + 2, ew * 0.62, eh * 0.86, 0, 0, Math.PI * 2); g.fill();
+      // 동공
+      g.fillStyle = '#101018'; g.beginPath(); g.ellipse(x, ey + 3, ew * 0.26, eh * 0.42, 0, 0, Math.PI * 2); g.fill();
+      // 하이라이트
+      g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(x - s * 7, ey - 7, 6, 7, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.ellipse(x + s * 6, ey + 8, 3, 3.5, 0, 0, Math.PI * 2); g.fill();
+      // 위 속눈썹 라인
+      g.strokeStyle = '#2a1e22'; g.lineWidth = 5; g.lineCap = 'round';
+      g.beginPath(); g.ellipse(x, ey, ew + 1, eh + 1, 0, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+      g.lineWidth = 2.5; g.beginPath(); g.ellipse(x, ey, ew, eh, 0, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+    }
+    // 눈썹
+    g.strokeStyle = hair; g.lineWidth = 5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x - s * 24, ey - 40); g.quadraticCurveTo(x, ey - 48 - tilt * 26, x + s * 24, ey - 40 + tilt * 36); g.stroke();
+    // 볼터치
+    g.fillStyle = 'rgba(255,140,140,0.32)'; g.beginPath(); g.ellipse(x + s * 22, ey + 38, 18, 8, 0, 0, Math.PI * 2); g.fill();
+  }
+  // 입
+  g.strokeStyle = '#a04848'; g.lineWidth = 3; g.lineCap = 'round';
+  g.beginPath(); g.arc(cx, ey + 56, 8, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+  // 흉터 (이마 왼쪽)
+  if (ch.look && ch.look.scar) {
+    g.fillStyle = 'rgba(170,60,50,0.85)';
+    g.beginPath(); g.moveTo(cx - 48, ey - 70); g.quadraticCurveTo(cx - 30, ey - 88, cx - 12, ey - 66); g.quadraticCurveTo(cx - 30, ey - 76, cx - 48, ey - 70); g.fill();
+  }
+  // 코 (작은 점)
+  g.fillStyle = 'rgba(160,100,90,0.5)'; g.beginPath(); g.arc(cx, ey + 32, 2.2, 0, Math.PI * 2); g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
 }
 
 // ---------- 모델: 머리 큰 귀여운 비율(2.5등신), 표정·앞머리·무늬 하오리·주름 하카마 ----------
@@ -105,6 +174,22 @@ export function buildModel(ch) {
     for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.02), mat(patColor)); d.position.set(s * 0.17, 0.76 + i * 0.2, -0.265); d.rotation.z = Math.PI / 4; g.add(d); }
   } else if (pat === 'flames') {
     for (let i = 0; i < 5; i++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 4), mat(patColor)); f.position.set(-0.24 + i * 0.12, 0.76, -0.265); g.add(f); }
+  } else if (pat === 'check' || pat === 'halfcheck') {
+    // 이치마츠 격자 (전통 문양)
+    for (let r = 0; r < 4; r++) for (let col = 0; col < 4; col++) {
+      if ((r + col) % 2) continue;
+      if (pat === 'halfcheck' && col < 2) continue;
+      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.02), mat(patColor));
+      sq.position.set(-0.25 + col * 0.165, 0.75 + r * 0.155, -0.265); g.add(sq);
+      const sq2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.09), mat(patColor));
+      sq2.position.set(col < 2 ? -0.46 : 0.46, 0.75 + r * 0.155, -0.15 + (col % 2) * 0.1); g.add(sq2);
+    }
+  } else if (pat === 'uroko') {
+    // 우로코(비늘) 삼각 문양 (전통 문양)
+    for (let r = 0; r < 3; r++) for (let col = 0; col < 4; col++) {
+      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.13, 3), mat(patColor));
+      tri.position.set(-0.24 + col * 0.16 + (r % 2) * 0.08, 0.78 + r * 0.17, -0.265); tri.rotation.y = Math.PI / 6; g.add(tri);
+    }
   } else if (pat === 'leaves') {
     for (let i = 0; i < 4; i++) { const lf = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), mat(patColor)); lf.scale.set(1, 1.6, 0.4); lf.position.set(-0.2 + i * 0.13, 0.78 + (i % 2) * 0.22, -0.265); lf.rotation.z = 0.5; g.add(lf); }
   }
@@ -114,33 +199,37 @@ export function buildModel(ch) {
   // ---- 목·머리 ----
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 6), mat(SKIN)); neck.position.y = 1.36; g.add(neck);
   const headG = new THREE.Group(); headG.position.y = 1.7; g.add(headG); parts.head = headG;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), mat(SKIN)); head.scale.set(1, 0.95, 0.92); headG.add(head);
-  // 눈
-  parts.eyes = [];
-  for (const s of [-1, 1]) {
-    const white = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
-    white.scale.set(0.85, 1.15, 0.45); white.position.set(s * 0.13, 0.02, 0.28);
-    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 6), new THREE.MeshLambertMaterial({ color: C.eye || 0x3060a0, emissive: C.eye || 0x3060a0, emissiveIntensity: 0.25 }));
-    iris.scale.set(1, 1.3, 0.5); iris.position.set(s * 0.13, 0.0, 0.325);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), new THREE.MeshBasicMaterial({ color: 0x101018 })); pupil.position.set(s * 0.13, -0.01, 0.35);
-    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.02, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(s * 0.11, 0.035, 0.36);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.02), mat(C.hair)); brow.position.set(s * 0.13, 0.15, 0.3); brow.rotation.z = -s * (L.browTilt ?? 0.15);
-    const blush = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshLambertMaterial({ color: 0xffb0a8, transparent: true, opacity: 0.55 }));
-    blush.scale.set(1.3, 0.7, 0.4); blush.position.set(s * 0.23, -0.07, 0.25);
-    headG.add(white, iris, pupil, hl, brow, blush);
-    parts.eyes.push(white, iris, pupil, hl);
+  const faceOpen = makeFaceTexture(ch, false), faceClosed = makeFaceTexture(ch, true);
+  const faceMat = new THREE.MeshToonMaterial({ map: faceOpen, gradientMap: gradientMap() });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), faceMat); head.scale.set(1, 0.97, 0.94); headG.add(head);
+  parts.faceMat = faceMat; parts.faceOpen = faceOpen; parts.faceClosed = faceClosed; parts.eyes = [];
+  if (L.boarMask) {
+    // 멧돼지 가면: 주둥이·코·귀·엄니, 가면 아래 얼굴은 가려짐
+    const fur = 0xb0a494;
+    const mask = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 10), mat(fur)); mask.scale.set(1, 0.95, 1.0); mask.position.y = 0.02;
+    const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 8), mat(0x6a6058)); snout.rotation.x = Math.PI / 2; snout.position.set(0, -0.08, 0.42);
+    const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.06, 8), mat(0x3a2a2a)); nose.rotation.x = Math.PI / 2; nose.position.set(0, -0.08, 0.58);
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), new THREE.MeshBasicMaterial({ color: 0x101010 })); eye.position.set(s * 0.16, 0.1, 0.36); headG.add(eye);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.26, 5), mat(fur)); ear.position.set(s * 0.3, 0.36, -0.05); ear.rotation.z = -s * 0.5; headG.add(ear);
+      const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 5), mat(0xf0e6c8)); tusk.position.set(s * 0.14, -0.2, 0.42); tusk.rotation.x = -0.6; headG.add(tusk);
+    }
+    headG.add(mask, snout, nose);
+    parts.masked = true;
   }
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.022, 0.02), mat(0x9a4a4a)); mouth.position.set(0, -0.11, 0.32); headG.add(mouth);
   // 머리카락: 캡 + 앞머리 + 옆머리
-  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.365, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), mat(C.hair)); hairCap.position.y = 0.02; hairCap.scale.set(1, 0.98, 0.96); headG.add(hairCap);
+  // 머리카락 캡: 눈 위까지만(적도 위) — 뒤통수는 조금 더 내려옴
+  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.365, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.44), mat(C.hair)); hairCap.position.y = 0.03; hairCap.scale.set(1, 0.98, 0.96); headG.add(hairCap);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.36, 14, 10, Math.PI * 0.55, Math.PI * 0.9, Math.PI * 0.3, Math.PI * 0.4), mat(C.hair)); hairBack.position.y = 0.02; hairBack.scale.set(1, 0.98, 0.96); headG.add(hairBack);
   const bangLens = L.bangs || [0.2, 0.28, 0.24, 0.3, 0.2];
   for (let i = 0; i < bangLens.length; i++) {
     const x = -0.24 + i * (0.48 / (bangLens.length - 1));
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.11, bangLens[i], 0.1), mat(C.hair));
-    b.position.set(x, 0.24 - bangLens[i] / 2, 0.28); b.rotation.x = 0.18; b.rotation.z = (x) * 0.5;
+    const len = bangLens[i] * 0.75;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.11, len, 0.09), mat(C.hair));
+    b.position.set(x, 0.33 - len / 2, 0.27); b.rotation.x = 0.22; b.rotation.z = (x) * 0.5;
     headG.add(b);
   }
-  for (const s of [-1, 1]) { const lock = new THREE.Mesh(new THREE.BoxGeometry(0.09, L.longSide ? 0.5 : 0.3, 0.13), mat(C.hair)); lock.position.set(s * 0.33, L.longSide ? -0.05 : 0.05, 0.08); headG.add(lock); }
+  for (const s of [-1, 1]) { const lock = new THREE.Mesh(new THREE.BoxGeometry(0.09, L.longSide ? 0.5 : 0.3, 0.13), mat(C.hair)); lock.position.set(s * 0.33, L.longSide ? -0.05 : 0.05, -0.02); headG.add(lock); }
   if (L.ponytail) { const pt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.55, 6), mat(C.hair)); pt.position.set(0, -0.05, -0.36); pt.rotation.x = 0.55; headG.add(pt); parts.ponytail = pt; }
   if (L.braid) { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.7, 6), mat(C.hair)); br.position.set(0.22, -0.2, -0.28); br.rotation.x = 0.35; headG.add(br); for (let i = 0; i < 3; i++) { const bead = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.02, 4, 8), mat(0xd9a640)); bead.position.set(0.22 + Math.sin(0.35) * 0, -0.05 - i * 0.2, -0.32 - i * 0.07); headG.add(bead); } }
   if (L.spikyHair) {
@@ -200,11 +289,25 @@ export function buildModel(ch) {
   katana.rotation.x = -1.05;
   rightArm.add(katana);
   parts.katana = katana; parts.bladeMat = bladeMat;
+  if (L.twinBlades) {
+    const k2 = katana.clone(); k2.position.set(0, -0.46, 0); leftArm.add(k2);
+  }
   const saya = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 1.05 * bs, 6), mat(0x11111a)); saya.position.set(-0.22, 0.8, -0.16); saya.rotation.set(1.35, 0, 0.25);
   const sayaRing = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 4, 8), mat(0xb09a4a)); sayaRing.position.set(-0.2, 0.9, -0.12); sayaRing.rotation.set(1.35, 0, 0.25);
 
   g.add(leftArm, rightArm, saya, sayaRing);
-  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const outlines = [];
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    if (o.material === bladeMat || o.material === edge.material) return;
+    const size = o.geometry.boundingSphere ? o.geometry.boundingSphere.radius : (o.geometry.computeBoundingSphere(), o.geometry.boundingSphere.radius);
+    const ol = new THREE.Mesh(o.geometry, OUTLINE_MAT);
+    ol.scale.setScalar(1 + Math.min(0.12, 0.022 / Math.max(size, 0.05)));
+    ol.castShadow = false; ol.receiveShadow = false; ol.isOutline = true;
+    outlines.push([o, ol]);
+  });
+  for (const [o, ol] of outlines) o.add(ol);
   parts.body = g;
   parts.blinkT = rand(2, 5);
   return parts;
@@ -212,10 +315,12 @@ export function buildModel(ch) {
 
 // 눈 깜빡임 (모델 공용)
 export function animateFace(parts, dt) {
+  if (parts.masked) return;
   parts.blinkT -= dt;
-  const closed = parts.blinkT < 0 && parts.blinkT > -0.12;
-  for (const e of parts.eyes) e.scale.y = closed ? 0.08 : (e.geometry.parameters.radius > 0.09 ? 1.15 : e.geometry.parameters.radius > 0.06 ? 1.3 : 1);
-  if (parts.blinkT < -0.12) parts.blinkT = rand(2.2, 5);
+  const closed = parts.blinkT < 0 && parts.blinkT > -0.14;
+  const want = closed ? parts.faceClosed : parts.faceOpen;
+  if (parts.faceMat.map !== want) parts.faceMat.map = want;
+  if (parts.blinkT < -0.14) parts.blinkT = rand(2.2, 5);
   if (parts.ponytail) parts.ponytail.rotation.x = 0.55 + Math.sin(performance.now() * 0.004) * 0.12;
 }
 
@@ -232,6 +337,7 @@ export class Player {
     this.pos = this.group.position;
     this.pos.set(0, 0, 4);
     this.yaw = Math.PI;
+    this.camYaw = 0;
     this.camYaw = 0;
     this.camPitch = 0.3;
     this.radius = PLAYER_RADIUS;
@@ -261,6 +367,9 @@ export class Player {
     this.blink = 0;
     this.kills = 0;
     this.lookIdle = 10;     // 마지막 수동 시점 조작 후 경과 시간
+    this.aim = null;        // 조준 중: { act, t, yaw }
+    this.aimMesh = null;
+    this.rushCd = 0;
     this.camTarget = null;  // 소프트 록온 대상
     this._camPos = new THREE.Vector3();
     this._camLook = new THREE.Vector3();
@@ -348,18 +457,45 @@ export class Player {
     }
     input.dash = false;
 
-    // 공격 입력
-    if (input.light) {
-      if (!this.attack) this._startAttack(this.nextLight, ctx);
-      else if (this.attack.def.next && this.attack.t >= this.attack.def.active[0]) this.queued = this.attack.def.next;
+    // ---- 공격 입력: 짧게 누르면 즉시, 길게 누르면 조준(부채꼴 표시) 후 떼면 발동 ----
+    this.rushCd = Math.max(0, this.rushCd - dt);
+    const HOLD = 0.2;
+    const acts = ['light', 'heavy', 'tech1', 'tech2'];
+    const actToAttack = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' };
+    const hold = input.hold || {}, release = input.release || {};
+    if (!this.aim) {
+      for (const a of acts) if (hold[a] && (hold[a] += dt) >= HOLD && !(this.attack && this.attack.def.special)) {
+        this.aim = { act: a, t: 0, yaw: this.camYaw + Math.PI };
+        break;
+      }
     }
-    // 기술 버튼: 마무리 형(연타 3타)을 바로 사용
-    if (input.tech1) { if (!this.attack) this._startAttack('light3', ctx); else if (this.attack.name !== 'light3' && !this.attack.def.special && this.attack.t >= this.attack.def.active[0]) this.queued = 'light3'; }
-    if (input.tech2) input.heavy = true;
-    if (input.heavy) {
-      if (!this.attack) this._startAttack('heavy', ctx);
-      else if (!this.attack.def.heavy && !this.attack.def.special && this.attack.t >= this.attack.def.active[0]) this.queued = 'heavy';
+    if (this.aim) {
+      const a = this.aim; a.t += dt;
+      // 조준 방향: 조이스틱/이동키가 있으면 그 방향, 아니면 카메라 정면 (마우스로 회전)
+      if (ml > 0.2) a.yaw = angleLerp(a.yaw, Math.atan2(mx, mz), 1 - Math.exp(-14 * dt)); else a.yaw = angleLerp(a.yaw, this.camYaw + Math.PI, 1 - Math.exp(-10 * dt));
+      this.yaw = angleLerp(this.yaw, a.yaw, 1 - Math.exp(-14 * dt));
+      this._showAim(ctx, a);
+      if (release[a.act] || !hold[a.act]) {
+        this._hideAim();
+        const name = actToAttack[a.act] || 'light1';
+        if (!(name === 'rush' && this.rushCd > 0)) { this.yaw = a.yaw; this._startAttack(name, ctx, { aimed: true }); }
+        this.aim = null;
+      }
+    } else {
+      // 짧은 탭
+      for (const a of acts) {
+        if (!release[a]) continue;
+        const name = actToAttack[a];
+        if (name === 'rush' && this.rushCd > 0) continue;
+        if (!this.attack) this._startAttack(name, ctx);
+        else if (!this.attack.def.special && this.attack.t >= this.attack.def.active[0]) {
+          if (a === 'light' && this.attack.def.next) this.queued = this.attack.def.next;
+          else if (name !== this.attack.name) this.queued = name;
+        }
+      }
     }
+    for (const a of acts) { if (release[a]) hold[a] = 0; release[a] = false; }
+    input.light = input.heavy = input.tech1 = input.tech2 = false;
     if (input.special && this.specialReady && !(this.attack && this.attack.def.special)) {
       this.gauge = 0;
       this._startAttack('special', ctx);
@@ -378,7 +514,7 @@ export class Player {
         this.events.push({ type: 'potion' });
       } else this.events.push({ type: 'potionFail' });
     }
-    input.light = input.heavy = input.special = input.potion = input.tech1 = input.tech2 = false;
+    input.special = input.potion = false;
 
     // 이동
     const move = new THREE.Vector3();
@@ -390,9 +526,11 @@ export class Player {
       const a = this.attack; const d = a.def; const w = d.active[0];
       if (a.t < w && ml > 0) this.yaw = angleLerp(this.yaw, Math.atan2(mx, mz), 1 - Math.exp(-14 * dt));
       if (a.t >= w * 0.6 && a.t < d.active[1] && d.lunge) move.copy(this.forward).multiplyScalar(d.lunge * dt);
-    } else if (ml > 0) {
+    } else if (ml > 0 && !this.aim) {
       move.set(mx, 0, mz).multiplyScalar(this.moveSpeed * dt);
       this.yaw = angleLerp(this.yaw, Math.atan2(mx, mz), 1 - Math.exp(-12 * dt));
+    } else if (ml > 0 && this.aim) {
+      move.set(mx, 0, mz).multiplyScalar(this.moveSpeed * 0.35 * dt);
     }
     move.addScaledVector(this.knock, dt);
     this.knock.multiplyScalar(Math.max(0, 1 - 7 * dt));
@@ -426,18 +564,19 @@ export class Player {
     return dmg;
   }
 
-  _startAttack(name, ctx) {
+  _startAttack(name, ctx, opt = {}) {
     const def = ATTACKS[name];
-    this.attack = { name, def, t: 0, hitSet: new Set(), fxDone: false, waveDone: false, waveCount: 0 };
+    if (!def) return;
+    this.attack = { name, def, t: 0, hitSet: new Set(), fxDone: false, waveDone: false, waveCount: 0, aimed: !!opt.aimed };
     this.queued = null;
+    if (def.rush) this.rushCd = def.cooldown;
     if (name.startsWith('light')) { this.nextLight = def.next || 'light1'; this.comboResetTimer = 0.55; }
     else this.nextLight = 'light1';
-    const wasMoving = this.moving;
-    if (!this.moving || def.special) this.yaw = this.camYaw + Math.PI;
-    // 조준 보정: 이동 중엔 정면 ±65°, 정지 시엔 전방향에서 가장 가까운 적 쪽으로
-    if (!def.special && ctx.enemies) {
-      let best = null, bestD = def.range + 1.8;
-      const limit = wasMoving ? 1.15 : Math.PI;
+    if (!opt.aimed && (!this.moving || def.special)) this.yaw = this.camYaw + Math.PI;
+    // 조준 보정: 조준한 공격은 없음. 짧은 탭은 정면 ±25° 안의 가까운 적에게만
+    if (!opt.aimed && !def.special && ctx.enemies) {
+      let best = null, bestD = def.range + 1.5;
+      const limit = 0.45;
       for (const e of ctx.enemies) {
         if (!e.targetable) continue;
         const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z;
@@ -454,6 +593,7 @@ export class Player {
     const mv = this.ch.moves || {};
     if (name === 'light3' && mv.l3) this.events.push({ type: 'move', name: mv.l3, tier: 1 });
     if (name === 'heavy' && mv.heavy) this.events.push({ type: 'move', name: mv.heavy, tier: 2 });
+    if (name === 'rush') { this.events.push({ type: 'move', name: mv.rush || '돌진 베기', tier: 2 }); this.invuln = Math.max(this.invuln, 0.35); }
     if (def.special) {
       const sp = this.ch.special;
       this.events.push({ type: 'move', name: mv.special || sp.name, tier: 3 });
@@ -503,9 +643,43 @@ export class Player {
     }
   }
 
+  // 조준 부채꼴 표시
+  _showAim(ctx, a) {
+    const name = { light: this.nextLight, heavy: 'heavy', tech1: 'light3', tech2: 'rush' }[a.act] || 'light1';
+    const def = ATTACKS[name];
+    const sp = this.ch.special;
+    const range = def.rush ? 6.5 : def.range * (def.heavy && this.skill.heavyPlus ? 1.4 : 1) + 0.3;
+    const angle = def.rush ? 0.5 : Math.min(def.arc, Math.PI * 1.1);
+    if (!this.aimMesh || this.aimMesh.userData.key !== name) {
+      this._hideAim();
+      const geo = ctx.effects._arcGeo(0.3, range, angle);
+      const m = new THREE.MeshBasicMaterial({ color: sp.c1, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true });
+      this.aimMesh = new THREE.Mesh(geo, m); this.aimMesh.userData.key = name;
+      // 바깥 테두리 선
+      const edgeGeo = ctx.effects._arcGeo(range - 0.12, range + 0.08, angle);
+      const edge = new THREE.Mesh(edgeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+      edge.position.y = 0.01; this.aimMesh.add(edge);
+      this.scene.add(this.aimMesh);
+    }
+    const am = this.aimMesh;
+    am.position.set(this.pos.x, 0.16, this.pos.z);
+    am.rotation.set(0, a.yaw, 0);
+    am.material.opacity = 0.6 + 0.25 * Math.sin(performance.now() * 0.01);
+    // 조준선 안의 적 강조 표시 (맞을 대상)
+    for (const e of ctx.enemies) {
+      if (!e.targetable) continue;
+      const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z; const d = Math.hypot(dx, dz);
+      const inRange = d <= range + e.radius && Math.abs(angleDiff(a.yaw, Math.atan2(dx, dz))) <= angle / 2 + 0.1;
+      e.hitFlash = Math.max(e.hitFlash, inRange ? 0.35 : 0);
+    }
+  }
+  _hideAim() {
+    if (this.aimMesh) { this.scene.remove(this.aimMesh); this.aimMesh.material.dispose(); this.aimMesh = null; }
+  }
+
   // 검격 테마 연출 (물결/번개/지진/불꽃/바람) — 강도 1~3
   _themeBurst(ctx, strength, sweep = 1, radius = 2.5) {
-    const sp = this.ch.special; const th = sp.theme;
+    const sp = this.ch.special; const th = strength >= 3 ? sp.theme : (this.ch.attackTheme || sp.theme);
     const c = this.center; const f = this.forward;
     const n = 10 * strength;
     const fx = f.x, fz = f.z;
@@ -670,6 +844,7 @@ export class Player {
     effects.addShake(0.5);
     this.events.push({ type: 'damaged', dmg });
     if (this.attack && !this.attack.def.special) { this.attack = null; this.queued = null; }
+    this._hideAim(); this.aim = null;
     if (this.hp <= 0) { this.alive = false; this.deadT = 0; this.events.push({ type: 'dead' }); }
     return true;
   }
@@ -716,6 +891,7 @@ export class Player {
       ra.rotation.set(damp(ra.rotation.x, tx, 30, dt), damp(ra.rotation.y, ty, 30, dt), damp(ra.rotation.z, tz, 30, dt));
     } else {
       if (this.dashTime > 0) { tx = -0.8; tz = -0.6; bodyTilt = 0.4; lx = -0.9; }
+      else if (this.aim) { tx = -0.9; ty = -0.6; lx = -0.4; bodyTilt = 0.05; }
       else if (this.moving) {
         this.walkPhase += dt * 11;
         lx = Math.sin(this.walkPhase) * 0.55;

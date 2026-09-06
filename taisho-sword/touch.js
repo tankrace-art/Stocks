@@ -13,16 +13,17 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   layer.innerHTML = `
     <div id="stick"><div id="stick-base"></div><div id="stick-knob"></div></div>
     <div id="btns">
-      <button class="tb tb-heavy" data-act="heavy">강공</button>
       <button class="tb tb-dash" data-act="dash">대시</button>
       <button class="tb tb-light" data-act="light">베기</button>
       <button class="tb tb-potion" data-act="potion">약<span id="tb-potion-n">0</span></button>
     </div>
     <div id="tech-row">
-      <button class="tb tech" data-act="tech1"><small>기술</small><span id="tech1-label">제1형</span></button>
-      <button class="tb tech" data-act="tech2"><small>기술</small><span id="tech2-label">제3형</span></button>
-      <button class="tb tech tb-special" data-act="special"><small>오의</small><span id="tech3-label">비검</span></button>
+      <button class="tb tech" data-act="tech1"><small>제1형</small><span id="tech1-label">마무리</span></button>
+      <button class="tb tech" data-act="tech2"><small>제2형</small><span id="tech2-label">돌진</span><i id="tech2-cd"></i></button>
+      <button class="tb tech" data-act="heavy"><small>제3형</small><span id="tech3-label">강공</span></button>
+      <button class="tb tech tb-special" data-act="special"><small>오의</small><span id="tech4-label">비검</span></button>
     </div>
+    <div id="aim-hint">길게 누르면 조준 · 조이스틱으로 방향</div>
     <div id="top-btns">
       <button id="tb-menu" aria-label="장비/스킬">장비·스킬</button>
       <button id="tb-sound" aria-label="소리">소리</button>
@@ -89,7 +90,7 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
         stickId = null; input.axisX = 0; input.axisY = 0;
         stick.style.display = 'none';
       } else if (t.identifier === lookId) {
-        if (performance.now() - lookStart < TAP_TIME && lookMoved < TAP_MOVE) input.light = true;
+        if (performance.now() - lookStart < TAP_TIME && lookMoved < TAP_MOVE) { input.hold.light = 0.0001; input.release.light = true; }
         lookId = null;
       }
     }
@@ -102,10 +103,18 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
   layer.addEventListener('touchcancel', onEnd, opts);
 
   // 액션 버튼
+  const AIMABLE = new Set(['light', 'heavy', 'tech1', 'tech2']);
+  input.hold = input.hold || {}; input.release = input.release || {};
   for (const b of layer.querySelectorAll('.tb')) {
     const act = b.dataset.act;
-    b.addEventListener('touchstart', (e) => { input[act] = true; b.classList.add('on'); if (e.cancelable) e.preventDefault(); e.stopPropagation(); }, opts);
-    const off = (e) => { b.classList.remove('on'); if (e.cancelable) e.preventDefault(); e.stopPropagation(); };
+    b.addEventListener('touchstart', (e) => {
+      if (AIMABLE.has(act)) input.hold[act] = 0.0001; else input[act] = true;
+      b.classList.add('on'); if (e.cancelable) e.preventDefault(); e.stopPropagation();
+    }, opts);
+    const off = (e) => {
+      if (AIMABLE.has(act)) input.release[act] = true;
+      b.classList.remove('on'); if (e.cancelable) e.preventDefault(); e.stopPropagation();
+    };
     b.addEventListener('touchend', off, opts);
     b.addEventListener('touchcancel', off, opts);
     b.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -130,9 +139,12 @@ export function setupTouch(input, { onPause, onMenu, onSound } = {}) {
     setMoves(moves) {
       const short = (s, d) => (s ? s.split('·').pop().trim() : d);
       layer.querySelector('#tech1-label').textContent = short(moves && moves.l3, '마무리');
-      layer.querySelector('#tech2-label').textContent = short(moves && moves.heavy, '강공');
-      layer.querySelector('#tech3-label').textContent = short(moves && moves.special, '비검');
+      layer.querySelector('#tech2-label').textContent = short(moves && moves.rush, '돌진');
+      layer.querySelector('#tech3-label').textContent = short(moves && moves.heavy, '강공');
+      layer.querySelector('#tech4-label').textContent = short(moves && moves.special, '비검');
     },
+    setRushCd(frac) { const el = layer.querySelector('#tech2-cd'); el.style.height = `${frac * 100}%`; },
+    showAimHint(on) { layer.querySelector('#aim-hint').classList.toggle('show', !!on); },
     setPotions(n) { layer.querySelector('#tb-potion-n').textContent = n; layer.querySelector('.tb-potion').classList.toggle('empty', n <= 0); },
     setSound(muted) { layer.querySelector('#tb-sound').textContent = muted ? '소리 꺼짐' : '소리 켜짐'; },
   };
