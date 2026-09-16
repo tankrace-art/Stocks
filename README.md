@@ -26,13 +26,30 @@
 - 종목별·카테고리별(재무/경쟁사/IR/산업/밸류에이션 등)로 자동 분류
 - 파일별 핵심 키워드, 발췌, 원본 경로 엑셀로 정리
 
-## 설치
+## 설치 & 실행 (초보자용 — 더블클릭만)
+
+**Windows:** `재무분석_실행.bat` 더블클릭
+**macOS/Linux:** `재무분석_실행.command` 더블클릭
+
+처음 실행하면:
+1. 필요한 파이썬 라이브러리를 자동으로 설치 (한 번만)
+2. `.env` 파일 자동 생성
+3. GUI 창이 뜸
+
+GUI에서:
+- **DART API 키** 입력 (https://opendart.fss.or.kr 에서 무료 발급)
+- **기업명**과 **기간** 입력
+- 필요하면 경쟁사·뉴스·노트 옵션 체크
+- **"분석 시작"** 클릭 → 엑셀 파일 자동 생성
+
+Python이 없으면 먼저 설치: https://www.python.org/downloads/
+(Windows 설치 시 "Add Python to PATH" 반드시 체크)
+
+## 명령줄 사용법 (선택)
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# .env 파일에 DART_API_KEY 입력
-# (선택) ANTHROPIC_API_KEY=sk-ant-... 추가 시 LLM 요약 활성
+cp .env.example .env  # DART_API_KEY 입력
 ```
 
 DART API 키 발급: https://opendart.fss.or.kr

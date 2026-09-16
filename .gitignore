@@ -7,3 +7,4 @@ venv/
 output/
 *.csv
 *.xlsx
+.gui_config
